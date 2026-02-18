@@ -7,6 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.5.0] - 2026-02-17
+
+### Security 🔒
+- **Eliminated all `shell=True` subprocess calls** — Codecs installation now uses `subprocess.run(input=)` for debconf pipe and list-form for apt commands, preventing command injection
+- **Fixed all bare `except` clauses** — 10 generic `except Exception` handlers replaced with specific types (`OSError`, `IOError`, `json.JSONDecodeError`, `subprocess.SubprocessError`, etc.); 1 documented outermost catch-all retained in `run()`
+- **Waydroid secure install** — Replaced `curl -fsSL | bash` with a download-then-execute pattern that validates the downloaded script has a valid shebang before running
+
+### Added ✨
+- **`ensure_flatpak_ready()` method** — Single cached method for Flatpak/Flathub setup, replacing 7 duplicate blocks throughout the codebase with session-level caching
+- **SIGTERM/SIGINT signal handling** — `_setup_signal_handlers()` registered in `__init__`, saves installation state and rollback manifest before clean exit on termination signals
+- **Post-install health check** — `post_install_health_check()` verifies APT packages, key binaries (steam, lutris, wine, mangohud, gamemoded), Flatpak apps, and GPU drivers (NVIDIA via nvidia-smi, AMD via lsmod amdgpu) after installation completes
+- **Categorized timeout constants** — 6 named constants (`TIMEOUT_QUICK` 5s, `TIMEOUT_NETWORK` 10s, `TIMEOUT_API` 15s, `TIMEOUT_DOWNLOAD` 120s, `TIMEOUT_INSTALL` 300s, `TIMEOUT_UPDATE` 600s) replacing 24 magic numbers throughout the codebase
+
+### Fixed 🐛
+- **Performance launcher (`launch-game.sh`) multilib issues** — Complete rewrite resolving 4 bugs:
+  - `libgamemodeauto.so.0` "wrong ELF class" error: GameMode now validates library presence via `ldconfig -p` before enabling
+  - MangoHud `/usr/$LIB/mangohud/libMangoHud.so` preload failure: Uses `MANGOHUD=1` env var (Vulkan implicit layer) instead of LD_PRELOAD
+  - Steam 32-bit subprocess conflicts: Steam launched without `gamemoderun` wrapper; users directed to per-game Steam Launch Options
+  - Missing MangoHud config: Script creates default `~/.config/MangoHud/MangoHud.conf` if absent
+  - Added argument validation, cleanup trap, CPU governor save/restore, and `set -euo pipefail`
+
+### Statistics 📊
+- Lines of code: 4,955 (+404 from v2.4.0)
+- Methods: 89 (+3 new)
+- CLI arguments: 54
+- Documentation: 3,000+ lines across 7 files
+
+---
+
+## [2.4.0] - 2026-02-17
+
+### Added ✨
+- **`--update` mode** — Reads `installation_state.json` to identify previously installed components, checks APT package versions for available upgrades, runs Flatpak updates, and detects newer GE-Proton releases from GitHub API
+- **`--self-update` mechanism** — Queries the GitHub API for the latest release tag, compares using semantic version parsing (handles v-prefix, hyphens, varying parts), downloads new script, validates syntax via `py_compile`, backs up current version as `.v{version}.backup`, and replaces atomically via `os.replace()`
+- **`--preset` configuration** — 4 named presets (`minimal`, `standard`, `complete`, `streaming`) that map to `InstallationConfig` flag combinations; presets overlay non-destructively onto explicit CLI flags so you can combine them
+- **`--check-requirements` system pre-check** — Validates disk space (5 GB min / 10 GB warn), RAM (2 GB min), architecture (x86_64/amd64 expected), dpkg lock status, and Python version; also runs automatically at start of `run()`
+- **`_preflight_packages()` validation** — Checks package availability via `apt-cache show` before batch installs, splitting lists into available/unavailable and skipping missing packages cleanly; integrated into `install_essential_packages()`
+- **`_parse_version()` utility** — Semantic version comparison handling `v` prefix, hyphenated suffixes, and varying part counts
+
+### Statistics 📊
+- Lines of code: 4,551 (+627 from v2.3.0)
+- Methods: 86
+- CLI arguments: 54
+
+---
+
+## [2.3.0] - 2026-02-17
+
+### Added ✨
+- **Action-based rollback engine** — Every reversible operation records its reversal command via `record_action()`, with 7 action types: `apt_install`, `flatpak_install`, `repo_add`, `file_create`, `file_modify`, `sysctl_write`, `ge_proton_install`
+- **Rollback manifest persistence** — Versioned JSON manifest (`rollback_manifest.json`) saved atomically (temp file + `os.replace()`) after every recorded action, survives script crashes and restarts
+- **Rollback execution engine** — `perform_rollback()` loads manifest, filters successful reversible actions, displays grouped summary by type, offers dry-run preview showing exact commands, processes actions in LIFO order, and archives manifest after completion (not deleted — audit trail preserved)
+- **Auto-recording hook** — `_auto_record_from_command()` injected into `run_command()` detects `apt-get install` and `flatpak install` calls, automatically recording packages for rollback without modifying individual install methods
+- **Per-package state tracking** — `save_installation_state()` builds per-package inventory (APT packages, Flatpak apps, created files, added repos, failed operations) from rollback actions
+- **GE-Proton SHA512 checksum verification** — Downloads `.sha512sum` asset from GitHub releases, parses hash, computes local SHA512, aborts on mismatch with user override option
+- **6 convenience recording methods** — `_record_package_install()`, `_record_flatpak_install()`, `_record_repo_add()`, `_record_file_create()`, `_record_file_modify()`, and manual `record_action()` calls for sysctl configs, Wine repos, vkBasalt config, and performance launcher
+- **`RollbackAction` dataclass** and **`ActionType` enum** — Structured types for rollback system with 9 fields and 7 action categories
+
+### Statistics 📊
+- Lines of code: 3,924 (+686 from v2.2.0)
+- Methods: 79
+- Rollback action types: 7
+
+---
+
+## [2.2.0] - 2026-02-16
+
+### Added ✨
+- **Dynamic distribution codename resolution** — 7-step fallback chain resolving codenames for any Debian/Ubuntu derivative: `UBUNTU_CODENAME` → `VERSION_CODENAME` for Ubuntu → derivative mapping table (Mint→Ubuntu, Elementary→Ubuntu, Zorin→Ubuntu) → `VERSION_ID` mapping → Debian-to-Ubuntu mapping → `ID_LIKE` fallback → empty string
+- **Dynamic GPU driver detection** — NVIDIA drivers resolved via `ubuntu-drivers devices` (Ubuntu family) or `apt-cache search` (Debian), never hardcoded; AMD firmware-aware for Debian non-free repos; Intel Arc GPU support detection
+- **Distro-aware package name resolution** — `_resolve_package_name()` and `_check_package_available()` handle package naming differences across Ubuntu, Debian, Mint, and derivatives (e.g., `ubuntu-restricted-extras` vs `mint-meta-codecs`)
+- **Wine repository URL validation** — HTTP HEAD request verifies WineHQ sources file exists before adding repository; Debian and Ubuntu URL paths resolved separately
+- **Network connectivity checking** — `check_network_connectivity()` tests reachability of distro-appropriate endpoints before remote operations
+- **Interactive/targeted flow control** — `_is_interactive_mode()` determines whether to prompt for everything (no flags) or install only flagged components; replaced broken `or True` conditionals
+
+### Fixed 🐛
+- **Broken `or True` conditionals** — Config flags were short-circuited by `or True` in several places, making CLI flags ineffective. Replaced with proper `_is_interactive_mode()` check.
+
+### Statistics 📊
+- Lines of code: 3,238 (+?? from v2.1.0, integrated enhancement)
+- Methods: 68
+
+---
+
 ## [2.1.0] - 2026-01-05
 
 ### Added ✨
@@ -58,13 +142,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Installation summary** - Added new tools (SOBER, GWE, vkBasalt, Waydroid)
 - **Error handling** - Improved graceful degradation across all new features
 - **Configuration system** - Added 6 new boolean flags to InstallationConfig
-
-### Documentation 📖
-- Created **NEW_FEATURES_EXPANSION.md** - Detailed documentation of v2.1 features
-- Created **BUGFIX_CHANGELOG.md** - Ubuntu 24.04 compatibility fixes
-- Updated **README.md** - Added all new platforms and utilities
-- Enhanced **Usage_Guide.md** - Complete documentation for 51+ CLI options
-- Updated **Quick_Start.md** - New platform examples
 
 ### Statistics 📊
 - Lines of code: 3,341 (+414 from v2.0.1)
@@ -139,17 +216,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Package Management** - Enhanced version checking and update detection
 - **Performance Launcher** - Improved error handling and feedback
 
-### Preserved 💯
-- All original functionality from v1.0
-- Smart installation prompts with version checking
-- Complete installation summary with actual versions
-- 130-line performance launcher script
-- Repository cleanup for broken PPAs
-- VM-specific instructions and tips
-- CPU governor sudo configuration
-- All detection methods with cross-validation
-- Complete error handling and logging
-
 ### Statistics 📊
 - Lines of code: 2,927 (was ~1,000 in v1.0)
 - CLI arguments: 40+
@@ -211,14 +277,48 @@ The original Ubuntu 24.04 gaming setup script with core functionality:
 | 2.0.0 | 2026-01-03 | CLI automation, multi-distro | 2,927 |
 | 2.0.1 | 2026-01-04 | Ubuntu 24.04 fixes | 2,927 |
 | 2.1.0 | 2026-01-05 | New platforms & utilities | 3,341 |
+| 2.2.0 | 2026-02-16 | Dynamic resolution, driver detection | 3,238 |
+| 2.3.0 | 2026-02-17 | Rollback engine, SHA512 verification | 3,924 |
+| 2.4.0 | 2026-02-17 | Update mode, presets, self-update | 4,551 |
+| 2.5.0 | 2026-02-17 | Security hardening, health check, signal handling | 4,955 |
 
 ---
 
 ## Upgrade Notes
 
-### From 2.0.x to 2.1.0
+### From 2.1.x to 2.5.0
 
-**No Breaking Changes** - All 2.0.x features preserved.
+**No Breaking Changes** — All 2.1.x features preserved and enhanced.
+
+**New Capabilities Available:**
+```bash
+# Use configuration presets
+sudo python3 debian_gaming_setup.py --preset standard -y
+
+# Rollback a previous installation
+sudo python3 debian_gaming_setup.py --rollback
+
+# Update previously installed components
+sudo python3 debian_gaming_setup.py --update
+
+# Check for script updates
+sudo python3 debian_gaming_setup.py --self-update
+
+# Validate system requirements
+sudo python3 debian_gaming_setup.py --check-requirements
+```
+
+**Key Improvements:**
+- All codenames and driver versions now resolved dynamically (no hardcoded values)
+- GE-Proton downloads verified with SHA512 checksums
+- All shell=True subprocess calls eliminated (security hardening)
+- Performance launcher rewritten to fix multilib LD_PRELOAD issues
+- Post-install health check verifies all components
+- Signal handlers save state on SIGTERM/SIGINT
+
+### From 2.0.x to 2.1.x
+
+**No Breaking Changes** — All 2.0.x features preserved.
 
 **New Features Available:**
 ```bash
@@ -239,7 +339,7 @@ sudo python3 debian_gaming_setup.py --vkbasalt
 ### From 1.0.0 to 2.x.x
 
 **Major Changes:**
-- 40+ CLI arguments added (backward compatible)
+- 54 CLI arguments added (backward compatible)
 - Interactive mode still works exactly as before
 - New features available via CLI flags
 - Enhanced error handling and logging
@@ -250,17 +350,11 @@ sudo python3 debian_gaming_setup.py --vkbasalt
 2. Run with your preferred method:
    - Interactive: `sudo python3 debian_gaming_setup.py`
    - Automated: `sudo python3 debian_gaming_setup.py -y [OPTIONS]`
+   - Preset: `sudo python3 debian_gaming_setup.py --preset standard -y`
 
 ---
 
 ## Future Roadmap
-
-### Planned for v2.2.0
-- [ ] Complete rollback implementation
-- [ ] Flatpak fallback for more tools
-- [ ] Pre-flight package availability check
-- [ ] Distribution-specific package mapping
-- [ ] Automated PPA availability checking
 
 ### Under Consideration
 - [ ] GUI version of the script
@@ -268,12 +362,13 @@ sudo python3 debian_gaming_setup.py --vkbasalt
 - [ ] Package cache for known working configurations
 - [ ] Custom kernel installation automation
 - [ ] Game-specific optimizations database
+- [ ] Privilege dropping for user-space operations
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](https://github.com/Sandler73/Debian-Gaming-Setup-Project/CONTRIBUTING.md) for how to contribute to this project.
+See [CONTRIBUTING.md](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/CONTRIBUTING.md) for how to contribute to this project.
 
 ---
 
