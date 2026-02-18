@@ -1,50 +1,63 @@
 #!/usr/bin/env python3
 """
 ═══════════════════════════════════════════════════════════════════════════════
-Debian-Based Comprehensive Gaming Setup Script v2.0
+Debian-Based Comprehensive Gaming Setup Script v2.5.0
 ═══════════════════════════════════════════════════════════════════════════════
 
 SYNOPSIS:
     Comprehensive automated gaming environment setup for Debian-based Linux
     distributions including Ubuntu, Linux Mint, Kali, Pop!_OS, and derivatives.
-    
-    This script preserves ALL functionality from the original ubuntu_gaming_setup.py
-    while adding extensive enhancements for multi-distribution support, CLI
-    automation, error handling, and additional gaming components.
 
 DESCRIPTION:
-    This script automates the installation and configuration of gaming components
-    including GPU drivers, gaming platforms, compatibility layers, system
-    optimizations, and additional utilities. Features include:
-    
-    PRESERVED FROM ORIGINAL:
-    • Complete GPU/VM detection with lspci and glxinfo cross-validation
-    • Smart package version checking and update detection
-    • Interactive installation prompts with version display
-    • Comprehensive installation summary with actual package versions
-    • Performance launcher script creation with CPU governor management
-    • Detailed logging with proper ownership management
-    • Repository cleanup and broken PPA handling
-    • Flatpak app version checking
-    • Progress indication and colored output
-    • Final steps with VM-specific instructions
-    
-    NEW ENHANCEMENTS:
-    • Universal Debian-based distribution support (no version locking)
-    • Comprehensive CLI argument support (40+ options)
-    • Dry-run mode for testing without changes
+    Automates installation and configuration of a complete gaming environment
+    including GPU drivers, gaming platforms, compatibility layers, performance
+    tools, system optimizations, and communication utilities. Capabilities:
+
+    Core Installation:
+    • GPU/VM auto-detection with lspci and glxinfo cross-validation
+    • Dynamic GPU driver selection (NVIDIA via ubuntu-drivers, AMD with Vulkan,
+      Intel with Arc support, VM guest tools for 6 hypervisors)
+    • Gaming platforms (Steam, Lutris, Heroic, ProtonUp-Qt, Sober, Waydroid)
+    • Wine/Proton with WineHQ repository validation and codename resolution
+    • GE-Proton with SHA512 checksum verification
+    • Performance tools (GameMode, MangoHud, Goverlay, GreenWithEnvy, vkBasalt)
+    • Communication tools (Discord, OBS, Mumble)
+    • Mod management (r2modman)
+    • System optimizations (sysctl tuning, performance launcher script)
+
+    Intelligent Behavior:
+    • Dynamic distribution codename resolution (no hardcoded codenames)
+    • Distro-aware package name mapping (Ubuntu vs Debian vs derivatives)
+    • Package availability pre-flight validation before install attempts
+    • Smart install/update prompts showing current and available versions
+    • Pre-flight network connectivity checking
+    • System requirements validation (disk space, RAM, architecture, dpkg lock)
+
+    State Management & Safety:
+    • Action-based rollback engine with LIFO reversal and dry-run preview
+    • Per-package state tracking with versioned JSON manifest
+    • Auto-recording of apt/flatpak installs, repo additions, file writes
+    • SIGTERM/SIGINT signal handlers for graceful cleanup
+    • Post-install health check verifying installed components
+
+    CLI Automation & UX:
+    • 55+ CLI arguments for targeted or fully automated installs
+    • Configuration presets (minimal, standard, complete, streaming)
+    • --update mode for centralized component updating
+    • --self-update to check GitHub for newer script versions
+    • Dry-run mode for testing without system changes
     • Auto-yes mode for unattended installation
-    • State management with JSON persistence
-    • Rollback framework with backup manifest
-    • Enhanced error handling with recovery tracking
-    • Additional tools: MangoHud, GE-Proton, Goverlay, controllers
-    • Multi-method hardware detection
-    • Input validation and sanitization
-    • Extended VM support (Hyper-V, Xen, Parallels)
+
+    Security:
+    • No shell=True subprocess calls (command injection prevention)
+    • Specific exception types (no bare except clauses)
+    • Categorized timeout constants for all operations
+    • Secure download-then-execute for external scripts (Waydroid)
+    • Deduplicated Flatpak setup with session caching
 
 SUPPORTED SYSTEMS:
     • Ubuntu (20.04+) - all editions
-    • Linux Mint (20+)
+    • Linux Mint (20+) including LMDE
     • Debian (11+)
     • Pop!_OS (20.04+)
     • Kali Linux (2020+)
@@ -53,18 +66,16 @@ SUPPORTED SYSTEMS:
     • Any Debian/Ubuntu derivative
 
 SUPPORTED HARDWARE:
-    • NVIDIA GPUs (proprietary drivers with version detection)
-    • AMD GPUs (Mesa/AMDGPU with Vulkan)
-    • Intel GPUs (Mesa/i915 with media acceleration)
+    • NVIDIA GPUs (dynamic driver selection via ubuntu-drivers or apt-cache)
+    • AMD GPUs (Mesa/AMDGPU with Vulkan, firmware-aware for Debian non-free)
+    • Intel GPUs (Mesa/i915 with media acceleration, Arc GPU support)
     • VMware virtual machines (open-vm-tools)
     • VirtualBox virtual machines (guest additions)
     • KVM/QEMU virtual machines (guest agent)
-    • Hyper-V virtual machines
-    • Xen virtual machines
-    • Parallels virtual machines
+    • Hyper-V, Xen, Parallels virtual machines
 
 USAGE EXAMPLES:
-    # Interactive installation (original behavior preserved)
+    # Interactive installation (prompts for each component)
     sudo python3 debian_gaming_setup.py
 
     # Dry-run mode (test without changes)
@@ -76,24 +87,35 @@ USAGE EXAMPLES:
     # Install specific components
     sudo python3 debian_gaming_setup.py --nvidia --steam --lutris
 
+    # Use a preset configuration
+    sudo python3 debian_gaming_setup.py --preset standard -y
+
     # Rollback previous installation
     sudo python3 debian_gaming_setup.py --rollback
+
+    # Update all previously installed components
+    sudo python3 debian_gaming_setup.py --update
+
+    # Check for script updates
+    sudo python3 debian_gaming_setup.py --self-update
+
+    # Validate system requirements without installing
+    sudo python3 debian_gaming_setup.py --check-requirements
 
 NOTES:
     • Requires sudo/root privileges
     • Creates backups before system modifications
     • Logs all operations to ~/gaming_setup_logs/
-    • Supports rollback of failed installations
-    • Can run in dry-run mode for testing
-    • Preserves all original interactive functionality
-    • Adds CLI automation for advanced users
+    • Supports rollback via --rollback with manifest archiving
+    • All codenames and driver versions are resolved dynamically
+    • Rollback manifest persists across script restarts
 
 VERSION:
-    2.0.0 - Complete Implementation
+    2.5.0
 
 AUTHOR:
-    Enhanced Gaming Setup Script
-    Based on original ubuntu_gaming_setup.py
+    Debian Gaming Setup Script
+    https://github.com/Sandler73/Debian-Gaming-Setup-Project
 
 LICENSE:
     MIT License
@@ -108,6 +130,7 @@ import platform
 import logging
 import json
 import shutil
+import signal
 import hashlib
 import argparse
 import pwd
@@ -115,6 +138,7 @@ import grp
 import re
 import time
 import urllib.request
+import urllib.error
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict, Tuple, Any
@@ -129,7 +153,7 @@ from collections import defaultdict
 def get_real_user() -> str:
     """
     Get the actual user who invoked sudo
-    
+
     Returns:
         Username of the actual user (not root)
     """
@@ -141,20 +165,20 @@ def get_real_user() -> str:
 def get_real_user_home() -> Path:
     """
     Get the home directory of the actual user
-    
+
     Returns:
         Path object representing user's home directory
     """
     real_user = get_real_user()
     try:
         return Path(pwd.getpwnam(real_user).pw_dir)
-    except:
+    except KeyError:
         return Path.home()
 
 def get_real_user_uid_gid() -> Tuple[int, int]:
     """
     Get UID and GID of the actual user
-    
+
     Returns:
         Tuple of (uid, gid) for the actual user
     """
@@ -162,7 +186,7 @@ def get_real_user_uid_gid() -> Tuple[int, int]:
     try:
         pw_record = pwd.getpwnam(real_user)
         return pw_record.pw_uid, pw_record.pw_gid
-    except:
+    except KeyError:
         return os.getuid(), os.getgid()
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -184,13 +208,40 @@ BACKUP_DIR.mkdir(exist_ok=True, parents=True)
 STATE_FILE = LOG_DIR / "installation_state.json"
 ROLLBACK_FILE = LOG_DIR / "rollback_manifest.json"
 
+# Script version constant for self-update checks
+SCRIPT_VERSION = "2.5.0"
+
+# Rollback manifest schema version
+ROLLBACK_SCHEMA_VERSION = "1.0"
+
+# Categorized timeout constants in seconds
+TIMEOUT_QUICK = 5        # Fast local operations (lspci, dpkg, dmesg)
+TIMEOUT_NETWORK = 10     # Network connectivity probes
+TIMEOUT_API = 15         # GitHub/remote API calls
+TIMEOUT_DOWNLOAD = 120   # File downloads (wget, large fetches)
+TIMEOUT_INSTALL = 300    # Package installations (apt-get install)
+TIMEOUT_UPDATE = 600     # Full system updates (apt-get upgrade)
+
+# Rollback manifest schema version
+ROLLBACK_SCHEMA_VERSION = "1.0"
+
+# GitHub repository for self-update checks
+GITHUB_REPO_OWNER = "Sandler73"
+GITHUB_REPO_NAME = "Debian-Gaming-Setup-Project"
+GITHUB_API_BASE = "https://api.github.com/repos"
+
+# System requirements thresholds
+MIN_DISK_SPACE_GB = 5.0    # Minimum free disk space in GB
+MIN_RAM_GB = 2.0            # Minimum RAM in GB
+WARN_DISK_SPACE_GB = 10.0  # Warn if less than this available
+
 # Set proper ownership for directories
 try:
     uid, gid = get_real_user_uid_gid()
     os.chown(LOG_DIR, uid, gid)
     os.chown(BACKUP_DIR, uid, gid)
-except Exception as e:
-    pass
+except (OSError, PermissionError):
+    pass  # Non-fatal: ownership fix best-effort during early init
 
 # Configure logging
 logging.basicConfig(
@@ -217,7 +268,7 @@ class Color:
     END = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
-    
+
     @staticmethod
     def disable():
         """Disable colors for non-TTY or logging"""
@@ -309,13 +360,57 @@ class HardwareInfo:
 
 @dataclass
 class BackupEntry:
-    """Backup entry for rollback functionality"""
+    """Backup entry for rollback functionality (legacy, kept for compatibility)"""
     timestamp: str
     file_path: str
     backup_path: str
     operation: str
     checksum: str = ""
     package_name: str = ""
+
+class ActionType(Enum):
+    """
+    Rollback action types for the state engine.
+
+
+    so the rollback engine knows how to undo it.
+    """
+    APT_INSTALL = "apt_install"           # apt-get install package(s)
+    FLATPAK_INSTALL = "flatpak_install"   # flatpak install app
+    REPO_ADD = "repo_add"                 # Repository addition (PPA, .sources file)
+    FILE_CREATE = "file_create"           # New file created by script
+    FILE_MODIFY = "file_modify"           # Existing file modified (backup stored)
+    SYSCTL_WRITE = "sysctl_write"         # sysctl config file written
+    GE_PROTON_INSTALL = "ge_proton_install"  # GE-Proton extracted to compat dir
+
+@dataclass
+class RollbackAction:
+    """
+    A single reversible action recorded during installation.
+
+
+    to fully reverse itself. Actions are processed LIFO during rollback.
+
+    Attributes:
+        action_type: Category of action (determines reversal strategy)
+        timestamp: ISO format timestamp when action was performed
+        description: Human-readable description of what was done
+        packages: List of package names involved (apt or flatpak)
+        files: List of file paths created or modified
+        backup_files: Dict mapping original path → backup path (for FILE_MODIFY)
+        reversal_commands: List of commands to execute for reversal
+        metadata: Additional info (repo URL, flatpak remote, version, etc.)
+        success: Whether the original action succeeded
+    """
+    action_type: str  # ActionType.value string for JSON serialization
+    timestamp: str
+    description: str
+    packages: List[str] = field(default_factory=list)
+    files: List[str] = field(default_factory=list)
+    backup_files: Dict[str, str] = field(default_factory=dict)
+    reversal_commands: List[List[str]] = field(default_factory=list)
+    metadata: Dict[str, str] = field(default_factory=dict)
+    success: bool = True
 
 @dataclass
 class InstallationConfig:
@@ -328,54 +423,54 @@ class InstallationConfig:
     install_amd_drivers: bool = False
     install_intel_drivers: bool = False
     install_vm_tools: bool = False
-    
+
     # Gaming platforms
     install_steam: bool = False
     install_lutris: bool = False
     install_heroic: bool = False
     install_protonup: bool = False
-    install_sober: bool = False  # NEW: Roblox on Linux
-    install_waydroid: bool = False  # NEW: Android container
-    
+    install_sober: bool = False
+    install_waydroid: bool = False
+
     # Compatibility layers
     install_wine: bool = False
     install_winetricks: bool = False
     install_dxvk: bool = False
     install_vkd3d: bool = False
     install_ge_proton: bool = False
-    
+
     # Performance tools
     install_gamemode: bool = False
     install_mangohud: bool = False
     install_goverlay: bool = False
-    install_greenwithenv: bool = False  # NEW: NVIDIA GPU control (GWE)
-    
+    install_greenwithenv: bool = False
+
     # Graphics enhancement tools
-    install_vkbasalt: bool = False  # NEW: Vulkan post-processing
-    install_reshade_setup: bool = False  # NEW: ReShade setup info
-    
+    install_vkbasalt: bool = False
+    install_reshade_setup: bool = False
+
     # Additional tools
     install_discord: bool = False
     install_obs: bool = False
     install_mumble: bool = False
     install_teamspeak: bool = False
-    install_mod_managers: bool = False  # NEW: Mod manager tools
-    
+    install_mod_managers: bool = False
+
     # Controller support
     install_controller_support: bool = False
     install_antimicrox: bool = False
     install_xboxdrv: bool = False
-    
+
     # System optimizations
     apply_system_optimizations: bool = False
     install_custom_kernel: bool = False
     optimize_btrfs: bool = False
     create_performance_launcher: bool = False
-    
+
     # Essential packages
     install_essential_packages: bool = False
     install_codecs: bool = False
-    
+
     # Script behavior
     dry_run: bool = False
     auto_yes: bool = False
@@ -386,16 +481,16 @@ class InstallationConfig:
     skip_update: bool = False
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ARGUMENT PARSER - NEW ENHANCEMENT
+# ARGUMENT PARSER
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def parse_arguments() -> argparse.Namespace:
     """
     Parse command line arguments for automated installation
-    
-    This is a NEW ENHANCEMENT that adds CLI automation while preserving
-    the original interactive mode when no arguments are provided.
-    
+
+    Adds CLI automation while preserving the original interactive mode
+    when no arguments are provided.
+
     Returns:
         Parsed arguments namespace
     """
@@ -420,7 +515,7 @@ Examples:
   sudo python3 debian_gaming_setup.py --rollback
         """
     )
-    
+
     # General options
     general = parser.add_argument_group('General Options')
     general.add_argument('-y', '--yes', action='store_true',
@@ -431,7 +526,7 @@ Examples:
                         help='Enable verbose debug output')
     general.add_argument('--no-backup', action='store_true',
                         help='Skip creating backups before modifications')
-    
+
     # GPU/Driver options
     drivers = parser.add_argument_group('GPU/Driver Options')
     drivers.add_argument('--nvidia', action='store_true',
@@ -442,7 +537,7 @@ Examples:
                         help='Install Intel drivers')
     drivers.add_argument('--vm-tools', action='store_true',
                         help='Install VM guest tools')
-    
+
     # Gaming platforms
     platforms = parser.add_argument_group('Gaming Platforms')
     platforms.add_argument('--steam', action='store_true',
@@ -459,7 +554,7 @@ Examples:
                           help='Install Waydroid (Android container)')
     platforms.add_argument('--all-platforms', action='store_true',
                           help='Install all gaming platforms (excludes Sober/Waydroid)')
-    
+
     # Compatibility layers
     compat = parser.add_argument_group('Compatibility Layers')
     compat.add_argument('--wine', action='store_true',
@@ -472,7 +567,7 @@ Examples:
                        help='Show VKD3D-Proton installation information')
     compat.add_argument('--ge-proton', action='store_true',
                        help='Install GE-Proton automatically')
-    
+
     # Performance tools
     perf = parser.add_argument_group('Performance Tools')
     perf.add_argument('--gamemode', action='store_true',
@@ -483,14 +578,14 @@ Examples:
                      help='Install Goverlay (MangoHud GUI)')
     perf.add_argument('--gwe', action='store_true',
                      help='Install GreenWithEnvy (NVIDIA GPU control)')
-    
+
     # Graphics enhancement tools
     graphics = parser.add_argument_group('Graphics Enhancement')
     graphics.add_argument('--vkbasalt', action='store_true',
                          help='Install vkBasalt (Vulkan post-processing layer)')
     graphics.add_argument('--reshade', action='store_true',
                          help='Show ReShade setup information (via vkBasalt)')
-    
+
     # Additional tools
     tools = parser.add_argument_group('Additional Tools')
     tools.add_argument('--discord', action='store_true',
@@ -509,7 +604,7 @@ Examples:
                       help='Install essential gaming packages')
     tools.add_argument('--codecs', action='store_true',
                       help='Install multimedia codecs')
-    
+
     # System options
     system = parser.add_argument_group('System Options')
     system.add_argument('--optimize', action='store_true',
@@ -520,27 +615,41 @@ Examples:
                        help='Skip system update')
     system.add_argument('--launcher', action='store_true',
                        help='Create performance launcher script')
-    
+
     # Maintenance
     maint = parser.add_argument_group('Maintenance')
     maint.add_argument('--rollback', action='store_true',
                       help='Rollback previous installation')
     maint.add_argument('--cleanup', action='store_true',
                       help='Clean up installation files and logs')
-    
+    maint.add_argument('--update', action='store_true',
+                      help='Update all previously installed components')
+    maint.add_argument('--self-update', action='store_true',
+                      help='Check GitHub for newer script version and update')
+    maint.add_argument('--check-requirements', action='store_true',
+                      help='Check system requirements without installing')
+
+    # Configuration presets
+    presets = parser.add_argument_group('Presets')
+    presets.add_argument('--preset', type=str, choices=[
+                         'minimal', 'standard', 'complete', 'streaming'],
+                         help='Apply a named configuration preset '
+                              '(minimal: drivers+steam, '
+                              'standard: +wine+lutris+gamemode, '
+                              'complete: all components, '
+                              'streaming: +obs+discord)')
+
     return parser.parse_args()
 
-# END OF PART 1
-# This file contains: imports, constants, helper functions, data classes, and argument parser
-# Continue with Part 2 for the main GamingSetup class
-# PART 2: Main GamingSetup Class - Core Methods
-# This continues from Part 1 and preserves ALL original functionality
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAIN GAMINGSETUP CLASS
+# ═══════════════════════════════════════════════════════════════════════════════
 
 class GamingSetup:
     """
     Main class for comprehensive Debian-based gaming setup
-    
-    PRESERVED FROM ORIGINAL:
+
+
     - All detection methods with lspci and glxinfo cross-validation
     - Package version checking and comparison
     - Smart installation prompts with version display
@@ -551,108 +660,146 @@ class GamingSetup:
     - Progress indication
     - Performance launcher creation
     - CPU governor configuration
-    
-    NEW ENHANCEMENTS:
+
     - CLI argument support
     - Dry-run mode
     - State management
     - Rollback framework
     - Multi-distribution support
     - Enhanced error tracking
+    - Dynamic codename resolution for all supported distributions
+    - Dynamic driver detection for NVIDIA, AMD, Intel, and VM environments
+    - Network connectivity checking before remote operations
+    - Automatic interactive/targeted flow control based on CLI flags
     """
-    
+
     def __init__(self, args: Optional[argparse.Namespace] = None):
         """
         Initialize the gaming setup system
-        
+
         Args:
             args: Parsed command-line arguments (None for interactive mode)
         """
         # Store arguments (None if running in interactive mode)
         self.args = args if args else argparse.Namespace()
-        
+
         # Initialize configuration from arguments or defaults
         self.config = self._init_config_from_args()
-        
+
         # System and hardware information
         self.system_info = SystemInfo()
         self.hardware_info = HardwareInfo()
-        
+
         # State tracking
-        self.rollback_entries: List[BackupEntry] = []
+        self.rollback_entries: List[BackupEntry] = []  # Legacy
+        self.rollback_actions: List[RollbackAction] = []  # Action-based rollback
         self.installation_state: Dict[str, Any] = {}
         self.failed_operations: List[str] = []
         self.current_phase = InstallationPhase.INIT
-        
+        self._session_id = datetime.now().strftime('%Y%m%d_%H%M%S')  # Unique session
+
+        self._setup_signal_handlers()
+
         # Verify prerequisites
         self.check_root()
-        
+
         # Load previous state if exists
         self.load_installation_state()
-    
+        self.load_rollback_manifest()  # Load previous rollback data
+
+    def _setup_signal_handlers(self):
+        """
+        Register signal handlers for graceful cleanup on SIGTERM/SIGINT.
+
+
+        and a clean message is displayed when the script is killed via
+        signal (e.g., kill command, system shutdown, Ctrl+C).
+        """
+        def _signal_handler(signum, frame):
+            """Handle termination signals gracefully"""
+            sig_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
+            print(f"\n{Color.YELLOW}Received {sig_name} — performing cleanup...{Color.END}")
+            logging.warning(f"Signal received: {sig_name}")
+
+            # Best-effort state save
+            try:
+                self.save_installation_state()
+                self.save_rollback_manifest()
+                logging.info("State saved during signal cleanup")
+            except (IOError, OSError):
+                pass
+
+            print(f"{Color.CYAN}State saved. Check logs: {LOG_FILE}{Color.END}")
+            sys.exit(128 + signum)
+
+        signal.signal(signal.SIGTERM, _signal_handler)
+        # SIGINT is also handled by KeyboardInterrupt in run(),
+        # but this provides a fallback for non-interactive contexts
+        signal.signal(signal.SIGINT, _signal_handler)
+
+        logging.debug("Signal handlers registered (SIGTERM, SIGINT)")
+
     def _init_config_from_args(self) -> InstallationConfig:
         """
         Initialize installation configuration from CLI arguments
-        
-        NEW ENHANCEMENT: Converts CLI arguments to configuration
+
         Falls back to interactive mode if no arguments provided
-        
+
         Returns:
             InstallationConfig object
         """
         config = InstallationConfig()
-        
+
         # If no args object or no specific flags, return default (interactive mode)
         if not hasattr(self, 'args') or not self.args:
             return config
-        
+
         # General options
         config.dry_run = getattr(self.args, 'dry_run', False)
         config.auto_yes = getattr(self.args, 'yes', False)
         config.verbose = getattr(self.args, 'verbose', False)
         config.create_backup = not getattr(self.args, 'no_backup', False)
         config.skip_update = getattr(self.args, 'skip_update', False)
-        
+
         # GPU/Driver options
         config.install_nvidia_drivers = getattr(self.args, 'nvidia', False)
         config.install_amd_drivers = getattr(self.args, 'amd', False)
         config.install_intel_drivers = getattr(self.args, 'intel', False)
         config.install_vm_tools = getattr(self.args, 'vm_tools', False)
-        
+
         # Gaming platforms
         if getattr(self.args, 'all_platforms', False):
             config.install_steam = True
             config.install_lutris = True
             config.install_heroic = True
             config.install_protonup = True
-            # Note: Sober and Waydroid excluded from all-platforms (specialized)
         else:
             config.install_steam = getattr(self.args, 'steam', False)
             config.install_lutris = getattr(self.args, 'lutris', False)
             config.install_heroic = getattr(self.args, 'heroic', False)
             config.install_protonup = getattr(self.args, 'protonup', False)
-        
+
         # Specialized platforms (always from explicit flags)
         config.install_sober = getattr(self.args, 'sober', False)
         config.install_waydroid = getattr(self.args, 'waydroid', False)
-        
+
         # Compatibility layers
         config.install_wine = getattr(self.args, 'wine', False)
         config.install_winetricks = getattr(self.args, 'winetricks', False)
         config.install_dxvk = getattr(self.args, 'dxvk', False)
         config.install_vkd3d = getattr(self.args, 'vkd3d', False)
         config.install_ge_proton = getattr(self.args, 'ge_proton', False)
-        
+
         # Performance tools
         config.install_gamemode = getattr(self.args, 'gamemode', False)
         config.install_mangohud = getattr(self.args, 'mangohud', False)
         config.install_goverlay = getattr(self.args, 'goverlay', False)
         config.install_greenwithenv = getattr(self.args, 'gwe', False)
-        
+
         # Graphics enhancement
         config.install_vkbasalt = getattr(self.args, 'vkbasalt', False)
         config.install_reshade_setup = getattr(self.args, 'reshade', False)
-        
+
         # Additional tools
         config.install_discord = getattr(self.args, 'discord', False)
         config.install_obs = getattr(self.args, 'obs', False)
@@ -660,179 +807,642 @@ class GamingSetup:
         config.install_teamspeak = getattr(self.args, 'teamspeak', False)
         config.install_mod_managers = getattr(self.args, 'mod_managers', False)
         config.install_controller_support = getattr(self.args, 'controllers', False)
-        
-        # System
-        config.apply_system_optimizations = getattr(self.args, 'optimize', False)
-        config.install_custom_kernel = getattr(self.args, 'custom_kernel', False)
-        config.create_performance_launcher = getattr(self.args, 'launcher', False)
         config.install_essential_packages = getattr(self.args, 'essential', False)
         config.install_codecs = getattr(self.args, 'codecs', False)
-        
+
+        # System optimizations
+        config.apply_system_optimizations = getattr(self.args, 'optimize', False)
+        config.create_performance_launcher = getattr(self.args, 'launcher', False)
+        config.install_custom_kernel = getattr(self.args, 'custom_kernel', False)
+
+        preset = getattr(self.args, 'preset', None)
+        if preset:
+            config = self._apply_preset(preset, config)
+
         return config
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # PREREQUISITE CHECKS - PRESERVED FROM ORIGINAL
+    # CONFIGURATION PRESETS
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
+    def _apply_preset(self, preset_name: str,
+                      config: InstallationConfig) -> InstallationConfig:
+        """
+        Apply a named configuration preset to the InstallationConfig.
+
+
+        overriding anything the user explicitly set via CLI flags.
+
+        Presets:
+            minimal:   Drivers + Steam only
+            standard:  + Wine, Lutris, Heroic, GameMode, MangoHud, essentials
+            complete:  All components enabled
+            streaming: Standard + OBS, Discord, Mumble
+
+        Args:
+            preset_name: Name of the preset to apply
+            config: Current InstallationConfig (explicit flags already set)
+
+        Returns:
+            Updated InstallationConfig
+        """
+        logging.info(f"Applying preset: '{preset_name}'")
+        print(f"{Color.CYAN}Applying preset: {preset_name}{Color.END}")
+
+        presets = {
+            'minimal': {
+                'install_steam': True,
+                'install_essential_packages': True,
+            },
+            'standard': {
+                'install_steam': True,
+                'install_lutris': True,
+                'install_heroic': True,
+                'install_protonup': True,
+                'install_wine': True,
+                'install_winetricks': True,
+                'install_gamemode': True,
+                'install_mangohud': True,
+                'install_essential_packages': True,
+                'install_codecs': True,
+                'apply_system_optimizations': True,
+                'create_performance_launcher': True,
+            },
+            'complete': {
+                'install_steam': True,
+                'install_lutris': True,
+                'install_heroic': True,
+                'install_protonup': True,
+                'install_sober': True,
+                'install_waydroid': True,
+                'install_wine': True,
+                'install_winetricks': True,
+                'install_ge_proton': True,
+                'install_gamemode': True,
+                'install_mangohud': True,
+                'install_goverlay': True,
+                'install_vkbasalt': True,
+                'install_discord': True,
+                'install_obs': True,
+                'install_mumble': True,
+                'install_mod_managers': True,
+                'install_controller_support': True,
+                'install_essential_packages': True,
+                'install_codecs': True,
+                'apply_system_optimizations': True,
+                'create_performance_launcher': True,
+            },
+            'streaming': {
+                'install_steam': True,
+                'install_lutris': True,
+                'install_heroic': True,
+                'install_protonup': True,
+                'install_wine': True,
+                'install_winetricks': True,
+                'install_gamemode': True,
+                'install_mangohud': True,
+                'install_discord': True,
+                'install_obs': True,
+                'install_mumble': True,
+                'install_essential_packages': True,
+                'install_codecs': True,
+                'apply_system_optimizations': True,
+                'create_performance_launcher': True,
+            },
+        }
+
+        if preset_name not in presets:
+            logging.warning(f"Unknown preset: '{preset_name}'")
+            print(f"{Color.YELLOW}⚠ Unknown preset '{preset_name}'. "
+                  f"Valid: {', '.join(presets.keys())}{Color.END}")
+            return config
+
+        preset_flags = presets[preset_name]
+        applied = []
+
+        for flag, value in preset_flags.items():
+            # Only set flags that weren't explicitly set by user CLI args
+            current = getattr(config, flag, None)
+            if current is False and value is True:
+                setattr(config, flag, True)
+                applied.append(flag.replace('install_', '').replace('_', '-'))
+
+        if applied:
+            print(f"  Components enabled: {', '.join(applied)}")
+
+        logging.info(f"Preset '{preset_name}' applied: {len(applied)} flags set")
+        return config
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SYSTEM REQUIREMENTS PRE-CHECK — NEW
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def check_system_requirements(self) -> bool:
+        """
+        Validate system requirements before starting installation.
+
+
+        architecture, and dpkg lock status.
+
+        Returns:
+            True if all requirements met (or user chose to continue)
+        """
+        self.banner("SYSTEM REQUIREMENTS CHECK")
+
+        all_ok = True
+        warnings = []
+        errors = []
+
+        # 1. Architecture check
+        arch = platform.machine()
+        if arch in ('x86_64', 'amd64'):
+            print(f"  {Color.GREEN}✓{Color.END} Architecture: {arch}")
+        elif arch in ('i386', 'i686'):
+            warnings.append(f"32-bit architecture ({arch}) — some packages may be unavailable")
+            print(f"  {Color.YELLOW}⚠{Color.END} Architecture: {arch} (32-bit — limited support)")
+        else:
+            errors.append(f"Unsupported architecture: {arch}")
+            print(f"  {Color.RED}✗{Color.END} Architecture: {arch} (unsupported)")
+
+        # 2. Disk space check
+        try:
+            stat = os.statvfs('/')
+            free_gb = (stat.f_bavail * stat.f_frsize) / (1024 ** 3)
+
+            if free_gb >= WARN_DISK_SPACE_GB:
+                print(f"  {Color.GREEN}✓{Color.END} Disk space: {free_gb:.1f} GB free")
+            elif free_gb >= MIN_DISK_SPACE_GB:
+                warnings.append(f"Low disk space: {free_gb:.1f} GB free (recommended: ≥{WARN_DISK_SPACE_GB} GB)")
+                print(f"  {Color.YELLOW}⚠{Color.END} Disk space: {free_gb:.1f} GB free (low)")
+            else:
+                errors.append(f"Insufficient disk space: {free_gb:.1f} GB free (minimum: {MIN_DISK_SPACE_GB} GB)")
+                print(f"  {Color.RED}✗{Color.END} Disk space: {free_gb:.1f} GB free (insufficient)")
+                all_ok = False
+        except OSError as e:
+            logging.warning(f"Could not check disk space: {e}")
+            print(f"  {Color.YELLOW}⚠{Color.END} Disk space: could not determine")
+
+        # 3. RAM check
+        try:
+            with open('/proc/meminfo', 'r') as f:
+                for line in f:
+                    if line.startswith('MemTotal:'):
+                        mem_kb = int(line.split()[1])
+                        mem_gb = mem_kb / (1024 * 1024)
+                        break
+                else:
+                    mem_gb = 0
+
+            if mem_gb >= MIN_RAM_GB:
+                print(f"  {Color.GREEN}✓{Color.END} RAM: {mem_gb:.1f} GB")
+            else:
+                warnings.append(f"Low RAM: {mem_gb:.1f} GB (recommended: ≥{MIN_RAM_GB} GB)")
+                print(f"  {Color.YELLOW}⚠{Color.END} RAM: {mem_gb:.1f} GB (low)")
+        except (OSError, ValueError) as e:
+            logging.warning(f"Could not check RAM: {e}")
+            print(f"  {Color.YELLOW}⚠{Color.END} RAM: could not determine")
+
+        # 4. dpkg lock check
+        dpkg_lock_files = ['/var/lib/dpkg/lock-frontend', '/var/lib/dpkg/lock']
+        dpkg_locked = False
+
+        for lock_file in dpkg_lock_files:
+            try:
+                fd = os.open(lock_file, os.O_RDONLY | os.O_CREAT)
+                try:
+                    import fcntl
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                except (IOError, OSError):
+                    dpkg_locked = True
+                finally:
+                    os.close(fd)
+            except (OSError, PermissionError):
+                pass
+
+        if dpkg_locked:
+            errors.append("dpkg is locked — another package manager is running")
+            print(f"  {Color.RED}✗{Color.END} dpkg: locked (another process is using it)")
+            all_ok = False
+        else:
+            print(f"  {Color.GREEN}✓{Color.END} dpkg: available")
+
+        # 5. Python version check
+        py_version = sys.version_info
+        if py_version >= (3, 7):
+            print(f"  {Color.GREEN}✓{Color.END} Python: {py_version.major}.{py_version.minor}.{py_version.micro}")
+        else:
+            errors.append(f"Python {py_version.major}.{py_version.minor} too old (need ≥3.7)")
+            print(f"  {Color.RED}✗{Color.END} Python: {py_version.major}.{py_version.minor} (need ≥3.7)")
+            all_ok = False
+
+        # Summary
+        print()
+        if errors:
+            for err in errors:
+                print(f"  {Color.RED}ERROR: {err}{Color.END}")
+        if warnings:
+            for warn in warnings:
+                print(f"  {Color.YELLOW}WARNING: {warn}{Color.END}")
+
+        if all_ok and not errors:
+            print(f"\n{Color.GREEN}✓ All system requirements met{Color.END}")
+            logging.info("System requirements check: PASSED")
+        elif errors:
+            print(f"\n{Color.RED}✗ System requirements not met{Color.END}")
+            logging.error(f"System requirements check: FAILED ({len(errors)} errors)")
+
+            if not self.confirm("Continue anyway? (installation may fail)"):
+                print("Installation cancelled due to unmet requirements.")
+                sys.exit(1)
+
+        return all_ok
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PACKAGE PRE-FLIGHT VALIDATION — NEW
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def _preflight_packages(self, packages: List[str],
+                            description: str = "") -> Tuple[List[str], List[str]]:
+        """
+        Validate package availability before attempting batch install.
+
+
+        a package list into available and unavailable before calling apt.
+
+        Args:
+            packages: List of package names to validate
+            description: Optional description for logging
+
+        Returns:
+            Tuple of (available_packages, unavailable_packages)
+        """
+        if not packages:
+            return [], []
+
+        available = []
+        unavailable = []
+
+        for pkg in packages:
+            if not pkg or pkg.startswith('-'):
+                continue
+            if self._check_package_available(pkg):
+                available.append(pkg)
+            else:
+                unavailable.append(pkg)
+
+        if unavailable:
+            logging.info(
+                f"Pre-flight ({description}): {len(unavailable)} packages unavailable: "
+                f"{', '.join(unavailable[:10])}"
+            )
+            if self.config.verbose:
+                print(f"{Color.YELLOW}  Pre-flight: unavailable packages skipped: "
+                      f"{', '.join(unavailable)}{Color.END}")
+
+        logging.debug(
+            f"Pre-flight ({description}): "
+            f"{len(available)} available, {len(unavailable)} unavailable"
+        )
+
+        return available, unavailable
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # UPDATE MODE
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def perform_update(self):
+        """
+        Update all previously installed components.
+
+
+        what was installed, then checks for and applies available updates.
+        """
+        self.banner("UPDATE MODE")
+
+        # Load previous installation state
+        if not self.installation_state:
+            self.load_installation_state()
+
+        if not self.installation_state:
+            print(f"{Color.YELLOW}No previous installation state found{Color.END}")
+            print(f"{Color.CYAN}  Run the installer first, then use --update{Color.END}")
+            return
+
+        last_run = self.installation_state.get('last_updated', 'unknown')
+        session = self.installation_state.get('session_id', 'unknown')
+        print(f"  Last installation: {last_run}")
+        print(f"  Session: {session}")
+        print()
+
+        installed = self.installation_state.get('installed_packages', {})
+        apt_packages = installed.get('apt', [])
+        flatpak_apps = installed.get('flatpak', [])
+
+        if not apt_packages and not flatpak_apps:
+            print(f"{Color.YELLOW}No tracked packages to update{Color.END}")
+            print(f"{Color.CYAN}  The state file may be from a pre-tracking version{Color.END}")
+            return
+
+        print(f"{Color.BOLD}Tracked Components:{Color.END}")
+        print(f"  APT packages:    {len(apt_packages)}")
+        print(f"  Flatpak apps:    {len(flatpak_apps)}")
+        print()
+
+        # Phase 1: System update
+        if not self.config.skip_update:
+            print(f"{Color.CYAN}Updating system package lists...{Color.END}")
+            self.run_command(["apt-get", "update"], "Updating package lists")
+
+        # Phase 2: APT package updates
+        if apt_packages:
+            print(f"\n{Color.BOLD}Checking APT package updates...{Color.END}")
+
+            updates_available = []
+            for pkg in apt_packages:
+                has_update, installed_ver, available_ver = self.check_updates_available(pkg)
+                if has_update:
+                    updates_available.append((pkg, installed_ver, available_ver))
+                    print(f"  {Color.CYAN}↑{Color.END} {pkg}: {installed_ver} → {available_ver}")
+
+            if updates_available:
+                print(f"\n  {len(updates_available)} updates available")
+                if self.confirm(f"Apply {len(updates_available)} APT updates?"):
+                    pkgs_to_update = [u[0] for u in updates_available]
+                    self.run_command(
+                        ["apt-get", "install", "-y", "--only-upgrade"] + pkgs_to_update,
+                        f"Updating {len(pkgs_to_update)} APT packages"
+                    )
+                    print(f"{Color.GREEN}✓ APT updates applied{Color.END}")
+            else:
+                print(f"  {Color.GREEN}✓ All APT packages are up to date{Color.END}")
+
+        # Phase 3: Flatpak updates
+        if flatpak_apps:
+            print(f"\n{Color.BOLD}Checking Flatpak updates...{Color.END}")
+
+            success, stdout, _ = self.run_command(
+                ["flatpak", "update", "-y"],
+                "Updating Flatpak applications",
+                check=False
+            )
+            if success:
+                print(f"{Color.GREEN}✓ Flatpak applications updated{Color.END}")
+            else:
+                print(f"{Color.YELLOW}⚠ Flatpak update encountered issues{Color.END}")
+
+        # Phase 4: GE-Proton version check
+        ge_proton_dir = REAL_USER_HOME / ".steam" / "root" / "compatibilitytools.d"
+        if ge_proton_dir.exists():
+            existing_versions = [
+                d.name for d in ge_proton_dir.iterdir()
+                if d.is_dir() and 'GE-Proton' in d.name
+            ]
+            if existing_versions:
+                print(f"\n{Color.BOLD}GE-Proton:{Color.END}")
+                for v in sorted(existing_versions):
+                    print(f"  Installed: {v}")
+
+                if self.confirm("Check for newer GE-Proton version?"):
+                    try:
+                        api_url = (
+                            "https://api.github.com/repos/"
+                            "GloriousEggroll/proton-ge-custom/releases/latest"
+                        )
+                        req = urllib.request.Request(api_url)
+                        req.add_header('User-Agent', 'debian-gaming-setup')
+                        with urllib.request.urlopen(req, timeout=TIMEOUT_API) as response:
+                            data = json.loads(response.read())
+                        latest_tag = data.get('tag_name', '')
+
+                        if latest_tag and latest_tag not in existing_versions:
+                            print(f"  {Color.CYAN}↑ Newer version available: {latest_tag}{Color.END}")
+                            if self.confirm(f"Install {latest_tag}?"):
+                                self._install_ge_proton()
+                        else:
+                            print(f"  {Color.GREEN}✓ Latest GE-Proton already installed{Color.END}")
+                    except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+                        logging.warning(f"Could not check GE-Proton updates: {e}")
+                        print(f"  {Color.YELLOW}⚠ Could not check for updates{Color.END}")
+
+        # Update the state file with current timestamp
+        self.installation_state['last_updated'] = datetime.now().isoformat()
+        self.installation_state['last_update_mode'] = True
+        self.save_installation_state()
+
+        print(f"\n{Color.GREEN}✓ Update check complete{Color.END}")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SELF-UPDATE MECHANISM — NEW
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def check_self_update(self):
+        """
+        Check GitHub for a newer version of this script and offer to download it.
+
+
+        release tag and compares against SCRIPT_VERSION. If newer, downloads
+        the updated script to the current location.
+        """
+        self.banner("SELF-UPDATE CHECK")
+
+        print(f"  Current version: {SCRIPT_VERSION}")
+        print(f"  Repository: {GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}")
+        print()
+
+        api_url = f"{GITHUB_API_BASE}/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/latest"
+
+        try:
+            req = urllib.request.Request(api_url)
+            req.add_header('User-Agent', 'debian-gaming-setup')
+
+            with urllib.request.urlopen(req, timeout=TIMEOUT_API) as response:
+                data = json.loads(response.read())
+
+            remote_tag = data.get('tag_name', '').lstrip('v')
+            release_name = data.get('name', remote_tag)
+            published_at = data.get('published_at', 'unknown')
+            html_url = data.get('html_url', '')
+
+            if not remote_tag:
+                print(f"{Color.YELLOW}⚠ Could not determine latest version{Color.END}")
+                return
+
+            print(f"  Latest release: {release_name} (tag: {remote_tag})")
+            print(f"  Published: {published_at}")
+
+            # Version comparison (semantic version: major.minor.patch)
+            local_parts = self._parse_version(SCRIPT_VERSION)
+            remote_parts = self._parse_version(remote_tag)
+
+            if remote_parts <= local_parts:
+                print(f"\n{Color.GREEN}✓ You are running the latest version{Color.END}")
+                logging.info(f"Self-update: current ({SCRIPT_VERSION}) is up to date")
+                return
+
+            print(f"\n{Color.CYAN}↑ Newer version available: {remote_tag}{Color.END}")
+
+            # Find the script asset in release
+            script_url = None
+            for asset in data.get('assets', []):
+                name = asset.get('name', '')
+                if name == 'debian_gaming_setup.py' or name.endswith('_gaming_setup.py'):
+                    script_url = asset.get('browser_download_url', '')
+                    break
+
+            if not script_url:
+                # Fallback: point to the release page
+                print(f"  {Color.CYAN}Download: {html_url}{Color.END}")
+                print(f"  {Color.YELLOW}No direct download found in release assets{Color.END}")
+                logging.info(f"Self-update: no script asset in release {remote_tag}")
+                return
+
+            if not self.confirm(f"Download and replace current script with v{remote_tag}?"):
+                return
+
+            # Download new version
+            current_script = os.path.abspath(sys.argv[0])
+            backup_script = f"{current_script}.v{SCRIPT_VERSION}.backup"
+
+            # Backup current version
+            if os.path.exists(current_script):
+                shutil.copy2(current_script, backup_script)
+                print(f"  Backed up current version to: {backup_script}")
+
+            # Download new version
+            download_path = f"{current_script}.new"
+            success, _, _ = self.run_command(
+                ["wget", "-O", download_path, script_url],
+                f"Downloading v{remote_tag}"
+            )
+
+            if success and os.path.exists(download_path):
+                # Verify it's valid Python
+                try:
+                    import py_compile
+                    py_compile.compile(download_path, doraise=True)
+                except py_compile.PyCompileError as e:
+                    print(f"{Color.RED}✗ Downloaded file has syntax errors: {e}{Color.END}")
+                    os.remove(download_path)
+                    return
+
+                # Replace current script
+                os.replace(download_path, current_script)
+                os.chmod(current_script, 0o755)
+
+                print(f"\n{Color.GREEN}✓ Updated to v{remote_tag}{Color.END}")
+                print(f"  {Color.CYAN}Please re-run the script to use the new version{Color.END}")
+                logging.info(f"Self-update: updated from {SCRIPT_VERSION} to {remote_tag}")
+            else:
+                print(f"{Color.YELLOW}⚠ Download failed{Color.END}")
+                if os.path.exists(download_path):
+                    os.remove(download_path)
+
+        except (urllib.error.URLError, urllib.error.HTTPError) as e:
+            logging.warning(f"Self-update check failed: {e}")
+            print(f"{Color.YELLOW}⚠ Could not reach GitHub: {e}{Color.END}")
+            print(f"  {Color.CYAN}Check manually: "
+                  f"https://github.com/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases{Color.END}")
+        except (json.JSONDecodeError, OSError) as e:
+            logging.error(f"Self-update parsing error: {e}")
+            print(f"{Color.YELLOW}⚠ Update check failed: {e}{Color.END}")
+
+    @staticmethod
+    def _parse_version(version_str: str) -> Tuple[int, ...]:
+        """
+        Parse a semantic version string into a comparable tuple.
+
+
+
+        Args:
+            version_str: Version string like '2.4.0', 'v2.3.0', '2.4.0-beta'
+
+        Returns:
+            Tuple of integers (major, minor, patch)
+        """
+        clean = version_str.lstrip('v').split('-')[0]
+        parts = []
+        for part in clean.split('.'):
+            try:
+                parts.append(int(part))
+            except ValueError:
+                parts.append(0)
+        # Pad to at least 3 parts
+        while len(parts) < 3:
+            parts.append(0)
+        return tuple(parts[:3])
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PREREQUISITE CHECKS
+    # ═══════════════════════════════════════════════════════════════════════════
+
     def check_root(self):
         """
-        Verify script is run with sudo privileges
-        
-        PRESERVED FROM ORIGINAL: Identical functionality
+        Verify script is running with root privileges
+
+        Exact same check
         """
         if os.geteuid() != 0:
-            print(f"{Color.RED}This script must be run with sudo privileges{Color.END}")
-            print(f"Usage: sudo python3 {sys.argv[0]}")
+            print(f"{Color.RED}This script must be run with sudo/root privileges{Color.END}")
+            print(f"{Color.CYAN}Usage: sudo python3 {sys.argv[0]}{Color.END}")
             sys.exit(1)
-        logging.info(f"Running with sudo privileges as user: {REAL_USER}")
-    
-    def check_ubuntu_version(self):
+
+    def check_debian_based(self):
         """
-        Verify OS version (enhanced to support all Debian-based distros)
-        
-        PRESERVED FROM ORIGINAL: Warning system for non-Ubuntu
-        ENHANCED: Now accepts all Debian-based distros instead of just Ubuntu 24.04.3
+        Verify system is Debian-based
+
+        with distro-aware detection
         """
         try:
             with open('/etc/os-release', 'r') as f:
-                os_info = f.read()
-                
-                # Check if Debian-based
-                is_debian_based = any(x in os_info.lower() for x in 
-                                     ['ubuntu', 'debian', 'mint', 'kali', 'pop', 
-                                      'elementary', 'zorin', 'mx linux', 'deepin'])
-                
-                if not is_debian_based:
-                    print(f"{Color.YELLOW}Warning: This script is designed for Debian-based distributions{Color.END}")
-                    print(f"{Color.YELLOW}Detected OS may not be fully compatible{Color.END}")
+                os_info = f.read().lower()
+
+            debian_indicators = ['debian', 'ubuntu', 'mint', 'pop', 'elementary',
+                               'zorin', 'kali', 'mx ', 'antiX', 'devuan', 'deepin']
+
+            if not any(indicator in os_info for indicator in debian_indicators):
+                if 'id_like' in os_info and ('debian' in os_info or 'ubuntu' in os_info):
+                    logging.info("Detected Debian/Ubuntu derivative via ID_LIKE")
+                else:
+                    print(f"{Color.RED}This script is designed for Debian-based distributions{Color.END}")
                     if not self.confirm("Continue anyway?"):
                         sys.exit(0)
-                else:
-                    # Just log the detected distro, don't enforce version
-                    distro_name = "Unknown"
-                    for line in os_info.split('\n'):
-                        if line.startswith('PRETTY_NAME='):
-                            distro_name = line.split('=')[1].strip('"')
-                            break
-                    logging.info(f"Detected Debian-based distribution: {distro_name}")
-        except Exception as e:
+            else:
+                # Just log the detected distro, don't enforce version
+                distro_name = "Unknown"
+                for line in os_info.split('\n'):
+                    if line.startswith('pretty_name='):
+                        distro_name = line.split('=')[1].strip('"')
+                        break
+                logging.info(f"Detected Debian-based distribution: {distro_name}")
+        except (IOError, OSError, ValueError) as e:
             logging.error(f"Could not verify OS version: {e}")
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # COMMAND EXECUTION - PRESERVED FROM ORIGINAL WITH ENHANCEMENTS
+    # USER INTERACTION
     # ═══════════════════════════════════════════════════════════════════════════
-    
-    def run_command(self, cmd, description="", check=True, shell=False, 
-                   env=None, timeout=300) -> Tuple[bool, str, str]:
-        """
-        Execute shell command with logging and error handling
-        
-        PRESERVED FROM ORIGINAL: All error handling, logging, timeout functionality
-        ENHANCED: Added dry-run mode, return values, better error tracking
-        
-        Args:
-            cmd: Command to execute (list or string)
-            description: Human-readable description
-            check: Raise exception on error
-            shell: Execute in shell
-            env: Environment variables
-            timeout: Command timeout in seconds
-            
-        Returns:
-            Tuple of (success: bool, stdout: str, stderr: str)
-        """
-        if description:
-            logging.info(description)
-            if not self.config.dry_run:
-                print(f"{Color.CYAN}>>> {description}{Color.END}")
-        
-        # DRY RUN MODE - NEW ENHANCEMENT
-        if self.config.dry_run:
-            cmd_str = cmd if isinstance(cmd, str) else ' '.join(str(c) for c in cmd)
-            print(f"{Color.YELLOW}[DRY RUN] Would execute: {cmd_str}{Color.END}")
-            logging.info(f"[DRY RUN] Would execute: {cmd_str}")
-            return True, "", ""
-        
-        try:
-            # Set default environment with DEBIAN_FRONTEND=noninteractive
-            # PRESERVED FROM ORIGINAL
-            if env is None:
-                env = os.environ.copy()
-                env['DEBIAN_FRONTEND'] = 'noninteractive'
-            
-            # Execute command - PRESERVED FROM ORIGINAL
-            if shell:
-                result = subprocess.run(cmd, shell=True, check=check, 
-                                      capture_output=True, text=True, env=env,
-                                      timeout=timeout)
-            else:
-                result = subprocess.run(cmd, check=check, 
-                                      capture_output=True, text=True, env=env,
-                                      timeout=timeout)
-            
-            # Log output - PRESERVED FROM ORIGINAL
-            if result.stdout:
-                logging.debug(result.stdout)
-            if result.returncode == 0:
-                logging.info(f"SUCCESS: {description}")
-                return True, result.stdout, result.stderr
-            else:
-                logging.warning(f"Command returned non-zero: {result.returncode}")
-                return False, result.stdout, result.stderr
-        
-        # Error handling - PRESERVED FROM ORIGINAL WITH ENHANCEMENTS
-        except subprocess.TimeoutExpired:
-            msg = f"TIMEOUT: {description} (exceeded {timeout} seconds)"
-            logging.error(msg)
-            print(f"{Color.RED}Command timed out: {description}{Color.END}")
-            self.failed_operations.append(msg)  # ENHANCED: Track failures
-            return False, "", msg
-        
-        except subprocess.CalledProcessError as e:
-            msg = f"FAILED: {description}"
-            logging.error(msg)
-            logging.error(f"Error: {e.stderr}")
-            if check:
-                print(f"{Color.RED}Error executing: {description}{Color.END}")
-                print(f"{Color.RED}{e.stderr}{Color.END}")
-            self.failed_operations.append(msg)  # ENHANCED: Track failures
-            return False, e.stdout if hasattr(e, 'stdout') else "", \
-                   e.stderr if hasattr(e, 'stderr') else str(e)
-        
-        except Exception as e:
-            msg = f"EXCEPTION: {description} - {str(e)}"
-            logging.error(msg)
-            self.failed_operations.append(msg)  # ENHANCED: Track failures
-            return False, "", str(e)
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # USER INTERACTION - PRESERVED FROM ORIGINAL WITH ENHANCEMENTS
-    # ═══════════════════════════════════════════════════════════════════════════
-    
+
     def confirm(self, question: str) -> bool:
         """
         Ask user for confirmation
-        
-        PRESERVED FROM ORIGINAL: Identical loop and validation
-        ENHANCED: Added auto-yes and dry-run support
-        
+
+        Identical loop and validation
+        Added auto-yes and dry-run support
+
         Args:
             question: Question to ask
-            
+
         Returns:
             Boolean confirmation result
         """
-        # ENHANCED: Auto-yes mode
         if self.config.auto_yes:
             print(f"{Color.CYAN}{question} [auto-yes]{Color.END}")
             return True
-        
-        # ENHANCED: Dry-run mode
+
         if self.config.dry_run:
             print(f"{Color.YELLOW}[DRY RUN] {question} [would prompt]{Color.END}")
             return True
-        
-        # PRESERVED FROM ORIGINAL: Exact same validation loop
+
         while True:
             try:
                 response = input(f"{Color.YELLOW}{question} (y/n): {Color.END}").lower()
@@ -844,272 +1454,283 @@ class GamingSetup:
             except (EOFError, KeyboardInterrupt):
                 print()
                 return False
-    
+
     def banner(self, text: str):
         """
         Display section banner
-        
-        PRESERVED FROM ORIGINAL: Identical formatting
+
+        Identical formatting
         """
         print(f"\n{Color.BOLD}{Color.HEADER}{'='*60}{Color.END}")
         print(f"{Color.BOLD}{Color.HEADER}{text.center(60)}{Color.END}")
         print(f"{Color.BOLD}{Color.HEADER}{'='*60}{Color.END}\n")
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # REPOSITORY MANAGEMENT - PRESERVED FROM ORIGINAL
+    # COMMAND EXECUTION
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
+    def run_command(self, cmd, description="", check=True, shell=False,
+                   env=None, timeout=TIMEOUT_INSTALL) -> Tuple[bool, str, str]:
+        """
+        Execute shell command with logging and error handling
+
+        All error handling, logging, timeout functionality
+        Added dry-run mode, return values, better error tracking
+
+        Args:
+            cmd: Command to execute (list or string)
+            description: Human-readable description
+            check: Raise exception on error
+            shell: Execute in shell
+            env: Environment variables
+            timeout: Command timeout in seconds
+
+        Returns:
+            Tuple of (success: bool, stdout: str, stderr: str)
+        """
+        if description:
+            logging.info(description)
+            if not self.config.dry_run:
+                print(f"{Color.CYAN}>>> {description}{Color.END}")
+
+        # DRY RUN MODE
+        if self.config.dry_run:
+            cmd_str = cmd if isinstance(cmd, str) else ' '.join(str(c) for c in cmd)
+            print(f"{Color.YELLOW}[DRY RUN] Would execute: {cmd_str}{Color.END}")
+            logging.info(f"[DRY RUN] Would execute: {cmd_str}")
+            return True, "", ""
+
+        try:
+            # Set default environment with DEBIAN_FRONTEND=noninteractive
+            if env is None:
+                env = os.environ.copy()
+                env['DEBIAN_FRONTEND'] = 'noninteractive'
+
+            result = subprocess.run(
+                cmd, capture_output=True, text=True,
+                shell=shell, env=env, timeout=timeout
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                logging.warning(f"Command returned {result.returncode}: {error_msg}")
+
+                if check:
+                    self.failed_operations.append(description or str(cmd))
+
+                return False, result.stdout, result.stderr
+
+            self._auto_record_from_command(cmd, description, True)
+
+            return True, result.stdout, result.stderr
+
+        except subprocess.TimeoutExpired:
+            logging.error(f"Command timed out after {timeout}s: {cmd}")
+            self.failed_operations.append(f"TIMEOUT: {description or str(cmd)}")
+            return False, "", f"Command timed out after {timeout} seconds"
+        except FileNotFoundError as e:
+            logging.error(f"Command not found: {e}")
+            return False, "", str(e)
+        except (OSError, subprocess.SubprocessError) as e:
+            logging.error(f"Command execution failed: {e}")
+            if check:
+                self.failed_operations.append(description or str(cmd))
+            return False, "", str(e)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # REPOSITORY MANAGEMENT
+    # ═══════════════════════════════════════════════════════════════════════════
+
     def clean_broken_repos(self):
         """
         Clean up broken repository configurations
-        
-        PRESERVED FROM ORIGINAL: Exact same logic for cleaning broken PPAs
-        ENHANCED: Added MangoHud PPA cleanup for Ubuntu 24.04
+
+        Exact same logic for cleaning broken PPAs
+        Added MangoHud PPA cleanup for Ubuntu 24.04
         """
         print(f"{Color.YELLOW}Checking for broken repositories...{Color.END}")
-        
-        # Try to update, if it fails due to broken repos, try to fix
-        # PRESERVED FROM ORIGINAL
+
         result, stdout, stderr = self.run_command(
             ["apt-get", "update"],
             "Testing repository configuration",
             check=False
         )
-        
+
         if not result:
             print(f"{Color.YELLOW}Found broken repositories, attempting cleanup...{Color.END}")
-            
-            # Common fix: remove problematic PPA list files
-            # PRESERVED FROM ORIGINAL + ENHANCED
+
             ppa_dir = "/etc/apt/sources.list.d/"
             if os.path.exists(ppa_dir):
                 for file in os.listdir(ppa_dir):
-                    # Original: Lutris PPA cleanup
-                    # Enhanced: MangoHud PPA cleanup for Ubuntu 24.04
                     if any(broken in file.lower() for broken in ["lutris", "mangohud"]):
                         file_path = os.path.join(ppa_dir, file)
                         try:
                             if not self.config.dry_run:
-                                # Backup before removing
                                 backup_path = f"{file_path}.broken"
                                 if os.path.exists(file_path):
                                     shutil.copy2(file_path, backup_path)
                                 os.remove(file_path)
                             print(f"{Color.GREEN}Removed broken repository: {file}{Color.END}")
-                        except Exception as e:
+                        except (OSError, PermissionError) as e:
                             logging.error(f"Could not remove {file}: {e}")
-            
-            # Try update again - PRESERVED FROM ORIGINAL
+
             self.run_command(
                 ["apt-get", "update"],
                 "Updating after repository cleanup",
                 check=False
             )
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # PACKAGE MANAGEMENT - PRESERVED FROM ORIGINAL
+    # PACKAGE MANAGEMENT
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
     def is_package_installed(self, package_name: str) -> bool:
         """
         Check if a package is installed
-        
-        PRESERVED FROM ORIGINAL: Exact same dpkg check
-        
-        Args:
-            package_name: Name of package to check
-            
-        Returns:
-            True if installed, False otherwise
+
+        Exact same dpkg check
         """
         try:
             result = subprocess.run(
-                ["dpkg", "-l", package_name],
-                capture_output=True,
-                text=True,
-                timeout=5
+                ["dpkg", "-s", package_name],
+                capture_output=True, text=True, timeout=TIMEOUT_QUICK
             )
-            return result.returncode == 0 and 'ii' in result.stdout
-        except:
+            return result.returncode == 0 and 'Status: install ok installed' in result.stdout
+        except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
-    
+
     def get_package_version(self, package_name: str) -> Optional[str]:
         """
         Get installed package version
-        
-        PRESERVED FROM ORIGINAL: Exact same dpkg-query logic
-        
-        Args:
-            package_name: Name of package
-            
-        Returns:
-            Version string or None
+
+        Exact same dpkg-query parsing
         """
         try:
             result = subprocess.run(
                 ["dpkg-query", "-W", "-f=${Version}", package_name],
-                capture_output=True,
-                text=True,
-                timeout=5
+                capture_output=True, text=True, timeout=TIMEOUT_QUICK
             )
             if result.returncode == 0:
                 return result.stdout.strip()
-        except:
+        except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
         return None
-    
+
     def get_available_version(self, package_name: str) -> Optional[str]:
         """
         Get available package version from repos
-        
-        PRESERVED FROM ORIGINAL: Exact same apt-cache logic
-        
-        Args:
-            package_name: Name of package
-            
-        Returns:
-            Version string or None
+
+        Exact same apt-cache parsing
         """
         try:
             result = subprocess.run(
                 ["apt-cache", "policy", package_name],
-                capture_output=True,
-                text=True,
-                timeout=5
+                capture_output=True, text=True, timeout=TIMEOUT_NETWORK
             )
             if result.returncode == 0:
                 for line in result.stdout.split('\n'):
                     if 'Candidate:' in line:
-                        return line.split(':')[1].strip()
-        except:
+                        version = line.split(':')[1].strip()
+                        if version != '(none)':
+                            return version
+        except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
         return None
-    
+
     def is_flatpak_installed(self, app_id: str) -> bool:
         """
         Check if a Flatpak app is installed
-        
-        PRESERVED FROM ORIGINAL: Exact same flatpak list check
-        
-        Args:
-            app_id: Flatpak application ID
-            
-        Returns:
-            True if installed, False otherwise
+
+        Exact same flatpak list check
         """
         try:
             result = subprocess.run(
                 ["flatpak", "list", "--app"],
-                capture_output=True,
-                text=True,
-                timeout=5
+                capture_output=True, text=True, timeout=TIMEOUT_QUICK
             )
             return app_id in result.stdout
-        except:
+        except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
-    
+
     def get_flatpak_version(self, app_id: str) -> Optional[str]:
         """
         Get installed Flatpak version
-        
-        PRESERVED FROM ORIGINAL: Exact same flatpak info parsing
-        
-        Args:
-            app_id: Flatpak application ID
-            
-        Returns:
-            Version string or None
+
+        Exact same flatpak info parsing
         """
         try:
             result = subprocess.run(
                 ["flatpak", "info", app_id],
-                capture_output=True,
-                text=True,
-                timeout=5
+                capture_output=True, text=True, timeout=TIMEOUT_QUICK
             )
             if result.returncode == 0:
                 for line in result.stdout.split('\n'):
                     if 'Version:' in line:
                         return line.split(':')[1].strip()
-        except:
+        except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
         return None
-    
+
     def check_updates_available(self, package_name: str) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Check if updates are available for a package
-        
-        PRESERVED FROM ORIGINAL: Exact same version comparison logic
-        
-        Args:
-            package_name: Name of package to check
-            
-        Returns:
-            Tuple of (update_available, installed_version, available_version)
+
+        Exact same version comparison logic
         """
         installed = self.get_package_version(package_name)
         available = self.get_available_version(package_name)
-        
+
         if installed and available and installed != available:
             return True, installed, available
         return False, installed, available
 
-# END OF PART 2
-# Continue with Part 3 for smart installation prompts and detection methods
-# PART 3: Smart Installation Prompts and Detection Methods
-# Preserves ALL original intelligent prompting and detection logic
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SMART INSTALLATION PROMPTS
+    # ═══════════════════════════════════════════════════════════════════════════
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SMART INSTALLATION PROMPTS - PRESERVED FROM ORIGINAL
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def prompt_install_or_update(self, software_name: str, package_name: Optional[str] = None,
+    def prompt_install_or_update(self, software_name: str,
+                                 package_name: Optional[str] = None,
                                  flatpak_id: Optional[str] = None) -> bool:
         """
         Smart prompt that checks installation status and offers update
-        
-        PRESERVED FROM ORIGINAL: This is the core intelligent prompting system
-        that checks versions, detects updates, and provides clear user feedback
-        
+
+        Core intelligent prompting system
+
         Args:
             software_name: Human-readable software name
             package_name: APT package name (optional)
             flatpak_id: Flatpak application ID (optional)
-            
+
         Returns:
             True if user wants to install/update, False otherwise
         """
-        # ENHANCED: Auto-yes mode bypasses but still shows info
         if self.config.auto_yes:
             print(f"{Color.CYAN}Auto-installing {software_name}...{Color.END}")
             return True
-        
+
         is_installed = False
         current_version = None
         available_version = None
         update_available = False
-        
-        # Check package installation - PRESERVED FROM ORIGINAL
+
         if package_name:
             is_installed = self.is_package_installed(package_name)
             if is_installed:
                 current_version = self.get_package_version(package_name)
                 available_version = self.get_available_version(package_name)
                 update_available = current_version != available_version
-        
-        # Check Flatpak installation - PRESERVED FROM ORIGINAL
+
         if flatpak_id and not is_installed:
             is_installed = self.is_flatpak_installed(flatpak_id)
             if is_installed:
                 current_version = self.get_flatpak_version(flatpak_id)
-        
-        # Build prompt based on status - PRESERVED FROM ORIGINAL
+
         if is_installed:
             if current_version:
                 print(f"{Color.GREEN}✓ {software_name} is already installed (version: {current_version}){Color.END}")
             else:
                 print(f"{Color.GREEN}✓ {software_name} is already installed{Color.END}")
-            
+
             if update_available and available_version:
                 print(f"{Color.CYAN}  Update available: {current_version} → {available_version}{Color.END}")
                 return self.confirm(f"Update {software_name}?")
@@ -1117,51 +1738,38 @@ class GamingSetup:
                 return self.confirm(f"Reinstall {software_name}?")
         else:
             return self.confirm(f"Install {software_name}?")
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # SYSTEM DETECTION - PRESERVED FROM ORIGINAL WITH ENHANCEMENTS
+    # SYSTEM DETECTION
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
     def detect_system(self):
         """
         Comprehensive system detection
-        
-        PRESERVED FROM ORIGINAL: All OS detection logic
-        ENHANCED: Better distro family detection, desktop environment detection
+
+        All OS detection logic
+        Better distro family detection, desktop environment detection
         """
         self.banner("SYSTEM DETECTION")
         self.current_phase = InstallationPhase.DETECTION
-        
+
         try:
-            # Read OS release information - PRESERVED FROM ORIGINAL
             os_release = {}
             with open('/etc/os-release', 'r') as f:
                 for line in f:
                     if '=' in line:
                         key, value = line.strip().split('=', 1)
                         os_release[key] = value.strip('"')
-            
-            # Detect distribution - ENHANCED: More comprehensive
+
             self.system_info.distro_name = os_release.get('NAME', 'Unknown')
             self.system_info.distro_version = os_release.get('VERSION_ID', 'Unknown')
             self.system_info.distro_id = os_release.get('ID', 'unknown')
-            
-            # Detect distribution family - ENHANCED
             self.system_info.distro_family = self._detect_distro_family(os_release)
-            
-            # Detect kernel - PRESERVED FROM ORIGINAL
             self.system_info.kernel_version = platform.release()
-            
-            # Detect architecture - PRESERVED FROM ORIGINAL
             self.system_info.architecture = platform.machine()
-            
-            # Detect desktop environment - ENHANCED
             self.system_info.desktop_environment = self._detect_desktop_environment()
-            
-            # Check if WSL - ENHANCED
             self.system_info.is_wsl = os.path.exists('/proc/sys/fs/binfmt_misc/WSLInterop')
-            
-            # Display detection results - ENHANCED FORMAT
+
             print(f"{Color.BOLD}System Information:{Color.END}")
             print(f"  Distribution:     {Color.CYAN}{self.system_info.distro_name} {self.system_info.distro_version}{Color.END}")
             print(f"  Family:           {Color.CYAN}{self.system_info.distro_family.value}{Color.END}")
@@ -1172,95 +1780,728 @@ class GamingSetup:
                 print(f"  Environment:      {Color.YELLOW}WSL (Windows Subsystem for Linux){Color.END}")
             print(f"  User:             {Color.CYAN}{REAL_USER}{Color.END}")
             print()
-            
+
             logging.info(f"System detection complete: {self.system_info.distro_name} "
                         f"{self.system_info.distro_version}")
-            
-        except Exception as e:
+
+        except (IOError, OSError, ValueError) as e:
             logging.error(f"System detection failed: {e}")
             raise
-    
+
     def _detect_distro_family(self, os_release: Dict[str, str]) -> DistroFamily:
         """
         Detect distribution family from OS release info
-        
-        ENHANCED: More comprehensive distro detection
-        
-        Args:
-            os_release: Dictionary from /etc/os-release
-            
-        Returns:
-            DistroFamily enum value
         """
-        name_lower = os_release.get('NAME', '').lower()
-        id_like = os_release.get('ID_LIKE', '').lower()
         distro_id = os_release.get('ID', '').lower()
-        
-        # Check for specific distributions
-        if 'mint' in name_lower or 'mint' in distro_id:
-            return DistroFamily.MINT
-        elif 'kali' in name_lower or 'kali' in distro_id:
-            return DistroFamily.KALI
-        elif 'pop' in name_lower or 'pop' in distro_id:
-            return DistroFamily.POPOS
-        elif 'elementary' in name_lower or 'elementary' in distro_id:
-            return DistroFamily.ELEMENTARY
-        elif 'zorin' in name_lower or 'zorin' in distro_id:
-            return DistroFamily.ZORIN
-        elif 'ubuntu' in name_lower or 'ubuntu' in id_like or 'ubuntu' in distro_id:
-            return DistroFamily.UBUNTU
-        elif 'debian' in name_lower or 'debian' in id_like or 'debian' in distro_id:
-            return DistroFamily.DEBIAN
-        
+        id_like = os_release.get('ID_LIKE', '').lower()
+
+        family_map = {
+            'ubuntu': DistroFamily.UBUNTU,
+            'debian': DistroFamily.DEBIAN,
+            'linuxmint': DistroFamily.MINT,
+            'kali': DistroFamily.KALI,
+            'pop': DistroFamily.POPOS,
+            'elementary': DistroFamily.ELEMENTARY,
+            'zorin': DistroFamily.ZORIN,
+        }
+
+        if distro_id in family_map:
+            return family_map[distro_id]
+
+        for key, family in family_map.items():
+            if key in id_like:
+                return family
+
         return DistroFamily.UNKNOWN
-    
+
     def _detect_desktop_environment(self) -> str:
-        """
-        Detect the desktop environment
-        
-        ENHANCED: New method for better user feedback
-        
-        Returns:
-            Desktop environment name
-        """
-        de = os.environ.get('DESKTOP_SESSION', '').lower()
-        
-        if not de:
-            de = os.environ.get('XDG_CURRENT_DESKTOP', '').lower()
-        
-        if 'gnome' in de:
+        """Detect current desktop environment"""
+        de = os.environ.get('XDG_CURRENT_DESKTOP', '').lower()
+        session = os.environ.get('DESKTOP_SESSION', '').lower()
+
+        combined = f"{de} {session}"
+
+        if 'gnome' in combined:
             return 'GNOME'
-        elif 'kde' in de or 'plasma' in de:
+        elif 'kde' in combined or 'plasma' in combined:
             return 'KDE Plasma'
-        elif 'xfce' in de:
+        elif 'xfce' in combined:
             return 'XFCE'
-        elif 'cinnamon' in de:
+        elif 'cinnamon' in combined:
             return 'Cinnamon'
-        elif 'mate' in de:
+        elif 'mate' in combined:
             return 'MATE'
-        elif 'pantheon' in de:
+        elif 'pantheon' in combined:
             return 'Pantheon'
-        elif 'lxde' in de or 'lxqt' in de:
+        elif 'lxde' in combined or 'lxqt' in combined:
             return 'LXDE/LXQt'
-        elif 'i3' in de or 'sway' in de:
+        elif 'i3' in combined or 'sway' in combined:
             return 'Tiling WM'
-        
+
         return 'Unknown'
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # GPU DETECTION - PRESERVED FROM ORIGINAL WITH ENHANCEMENTS
+    # DISTRIBUTION RESOLUTION SYSTEM
+    # Provides dynamic codename mapping for all Debian-based distributions
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
+    def _get_os_release_field(self, field_name: str) -> str:
+        """
+        Read a specific field from /etc/os-release safely.
+
+
+
+        Args:
+            field_name: The os-release field to read (e.g., 'VERSION_CODENAME')
+
+        Returns:
+            The field value as a string, or empty string if not found
+        """
+        try:
+            with open('/etc/os-release', 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith(f'{field_name}='):
+                        value = line.split('=', 1)[1].strip('"').strip("'")
+                        return value
+        except (FileNotFoundError, PermissionError, IOError) as e:
+            logging.warning(f"Could not read /etc/os-release field '{field_name}': {e}")
+        return ""
+
+    def _get_ubuntu_codename(self) -> str:
+        """
+        Resolve the effective Ubuntu codename for this system.
+
+
+        derivatives (Mint, Pop!_OS, Elementary, Zorin, etc.), and
+        Debian systems by mapping to the nearest Ubuntu equivalent.
+
+        Returns:
+            Ubuntu codename string (e.g., 'noble', 'jammy', 'focal')
+            or empty string if resolution fails entirely
+        """
+        # Step 1: Check UBUNTU_CODENAME (most direct)
+        ubuntu_codename = self._get_os_release_field('UBUNTU_CODENAME')
+        if ubuntu_codename:
+            logging.info(f"Distro resolver: UBUNTU_CODENAME = '{ubuntu_codename}'")
+            return ubuntu_codename
+
+        # Step 2: Read VERSION_CODENAME and distro ID
+        version_codename = self._get_os_release_field('VERSION_CODENAME')
+        distro_id = self._get_os_release_field('ID').lower()
+        distro_id_like = self._get_os_release_field('ID_LIKE').lower()
+        version_id = self._get_os_release_field('VERSION_ID')
+
+        logging.info(
+            f"Distro resolver: ID='{distro_id}', ID_LIKE='{distro_id_like}', "
+            f"VERSION_CODENAME='{version_codename}', VERSION_ID='{version_id}'"
+        )
+
+        # Step 3: If this IS Ubuntu, the VERSION_CODENAME is the answer
+        if distro_id == 'ubuntu':
+            if version_codename:
+                return version_codename
+            return self._ubuntu_version_to_codename(version_id)
+
+        # Step 4: Derivative codename → Ubuntu codename mapping
+        derivative_to_ubuntu = {
+            # Linux Mint 22.x (Ubuntu 24.04 Noble)
+            "wilma": "noble", "xia": "noble",
+            # Linux Mint 21.x (Ubuntu 22.04 Jammy)
+            "virginia": "jammy", "victoria": "jammy",
+            "vera": "jammy", "vanessa": "jammy",
+            # Linux Mint 20.x (Ubuntu 20.04 Focal)
+            "una": "focal", "uma": "focal",
+            "ulyssa": "focal", "ulyana": "focal",
+            # LMDE (Debian-based, not Ubuntu)
+            "faye": "bookworm", "elsie": "bullseye",
+            # Pop!_OS (follows Ubuntu codenames)
+            "jammy": "jammy", "noble": "noble",
+            # Elementary OS
+            "horus": "noble", "hera": "focal",
+            "odin": "focal", "jolnir": "jammy",
+            # Kali Linux
+            "kali-rolling": "bookworm",
+        }
+
+        if version_codename and version_codename in derivative_to_ubuntu:
+            resolved = derivative_to_ubuntu[version_codename]
+            logging.info(f"Distro resolver: Mapped derivative '{version_codename}' → '{resolved}'")
+            return resolved
+
+        # Step 5: Distro-specific VERSION_ID resolution
+        if distro_id == 'zorin':
+            zorin_map = {"17": "jammy", "16": "focal"}
+            major_version = version_id.split('.')[0] if version_id else ""
+            if major_version in zorin_map:
+                resolved = zorin_map[major_version]
+                logging.info(f"Distro resolver: Zorin {major_version} → '{resolved}'")
+                return resolved
+
+        if distro_id == 'elementary':
+            elementary_map = {"8": "noble", "7.1": "jammy", "7": "jammy", "6.1": "focal", "6": "focal"}
+            if version_id in elementary_map:
+                resolved = elementary_map[version_id]
+                logging.info(f"Distro resolver: Elementary {version_id} → '{resolved}'")
+                return resolved
+
+        # Step 6: Debian codename → nearest Ubuntu equivalent
+        debian_to_ubuntu = {
+            "trixie": "noble", "bookworm": "jammy", "bullseye": "focal",
+            "buster": "bionic", "sid": "noble",
+        }
+
+        if distro_id == 'debian' or 'debian' in distro_id_like:
+            if version_codename and version_codename in debian_to_ubuntu:
+                resolved = debian_to_ubuntu[version_codename]
+                logging.info(f"Distro resolver: Debian '{version_codename}' → '{resolved}'")
+                return resolved
+
+        # Step 7: ID_LIKE fallback
+        if 'ubuntu' in distro_id_like and version_codename:
+            logging.info(f"Distro resolver: Unknown Ubuntu derivative, trying '{version_codename}'")
+            return version_codename
+
+        # Step 8: Cannot determine
+        logging.warning(
+            f"Distro resolver: Could not determine Ubuntu codename for "
+            f"ID='{distro_id}', VERSION_CODENAME='{version_codename}'"
+        )
+        return ""
+
+    def _ubuntu_version_to_codename(self, version_id: str) -> str:
+        """Map Ubuntu VERSION_ID to codename"""
+        ubuntu_versions = {
+            "25.04": "plucky", "24.10": "oracular", "24.04": "noble",
+            "23.10": "mantic", "23.04": "lunar", "22.10": "kinetic",
+            "22.04": "jammy", "21.10": "impish", "21.04": "hirsute",
+            "20.10": "groovy", "20.04": "focal", "18.04": "bionic",
+        }
+        codename = ubuntu_versions.get(version_id, "")
+        if codename:
+            logging.info(f"Distro resolver: Ubuntu {version_id} → '{codename}'")
+        else:
+            logging.warning(f"Distro resolver: Unknown Ubuntu version '{version_id}'")
+        return codename
+
+    def get_wine_codename(self) -> str:
+        """
+        Resolve the correct WineHQ repository codename for this system.
+
+
+        """
+        distro_id = self._get_os_release_field('ID').lower()
+
+        winehq_debian_codenames = {"trixie", "bookworm", "bullseye", "buster"}
+        winehq_ubuntu_codenames = {
+            "plucky", "oracular", "noble", "mantic", "lunar",
+            "kinetic", "jammy", "focal", "bionic"
+        }
+
+        # Pure Debian: use Debian codename directly
+        version_codename = self._get_os_release_field('VERSION_CODENAME')
+        if distro_id == 'debian' and version_codename in winehq_debian_codenames:
+            logging.info(f"Wine resolver: Using Debian codename '{version_codename}' directly")
+            return version_codename
+
+        # Ubuntu and all derivatives: resolve to Ubuntu codename
+        ubuntu_codename = self._get_ubuntu_codename()
+
+        if ubuntu_codename in winehq_ubuntu_codenames:
+            logging.info(f"Wine resolver: Using Ubuntu codename '{ubuntu_codename}'")
+            return ubuntu_codename
+
+        # Fallback to newest supported
+        if ubuntu_codename:
+            logging.warning(f"Wine resolver: '{ubuntu_codename}' not in WineHQ list, using newest")
+            return "plucky"
+
+        logging.error("Wine resolver: Could not determine any codename for WineHQ")
+        return ""
+
+    def get_wine_repo_base_url(self) -> str:
+        """Determine correct WineHQ repository base URL (Debian vs Ubuntu path)"""
+        distro_id = self._get_os_release_field('ID').lower()
+        distro_id_like = self._get_os_release_field('ID_LIKE').lower()
+
+        if distro_id == 'debian' and 'ubuntu' not in distro_id_like:
+            return "https://dl.winehq.org/wine-builds/debian"
+        return "https://dl.winehq.org/wine-builds/ubuntu"
+
+    def get_waydroid_codename(self) -> str:
+        """
+        Resolve the correct codename for Waydroid repository setup.
+
+
+        """
+        version_codename = self._get_os_release_field('VERSION_CODENAME')
+        if version_codename:
+            logging.info(f"Waydroid resolver: Using system codename '{version_codename}'")
+            return version_codename
+
+        ubuntu_codename = self._get_ubuntu_codename()
+        if ubuntu_codename:
+            logging.info(f"Waydroid resolver: Fallback to Ubuntu codename '{ubuntu_codename}'")
+            return ubuntu_codename
+
+        logging.warning("Waydroid resolver: Could not determine system codename")
+        return ""
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # DISTRO-AWARE PACKAGE RESOLUTION — NEW
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def _resolve_package_name(self, generic_name: str) -> str:
+        """
+        Resolve a generic package name to the correct distro-specific name.
+
+
+        """
+        distro_id = self._get_os_release_field('ID').lower()
+        distro_id_like = self._get_os_release_field('ID_LIKE').lower()
+        version_id = self._get_os_release_field('VERSION_ID')
+
+        is_ubuntu_family = (
+            distro_id == 'ubuntu' or
+            distro_id in ('pop', 'zorin', 'elementary', 'linuxmint') or
+            'ubuntu' in distro_id_like
+        )
+        is_debian_native = distro_id == 'debian' and 'ubuntu' not in distro_id_like
+
+        major_version = ""
+        try:
+            major_version = version_id.split('.')[0] if version_id else ""
+        except (AttributeError, IndexError):
+            pass
+
+        mappings = {
+            "ubuntu-drivers-common": {
+                "debian_native": None,
+                "ubuntu_family": "ubuntu-drivers-common",
+            },
+            "linux-cpupower": {
+                "ubuntu_24+": "linux-tools-generic",
+                "ubuntu_family": "linux-cpupower",
+                "debian_native": "linux-cpupower",
+            },
+            "steam-installer": {
+                "debian_native": "steam",
+                "ubuntu_family": "steam-installer",
+            },
+        }
+
+        if generic_name not in mappings:
+            return generic_name
+
+        pkg_map = mappings[generic_name]
+
+        if is_ubuntu_family and major_version:
+            try:
+                if int(major_version) >= 24 and "ubuntu_24+" in pkg_map:
+                    return pkg_map["ubuntu_24+"]
+            except ValueError:
+                pass
+
+        if is_ubuntu_family and "ubuntu_family" in pkg_map:
+            resolved = pkg_map["ubuntu_family"]
+            return resolved if resolved is not None else ""
+
+        if is_debian_native and "debian_native" in pkg_map:
+            resolved = pkg_map["debian_native"]
+            return resolved if resolved is not None else ""
+
+        return generic_name
+
+    def _check_package_available(self, package_name: str) -> bool:
+        """
+        Check if a package exists in the currently configured repositories.
+
+
+        """
+        if not package_name:
+            return False
+        try:
+            result = subprocess.run(
+                ["apt-cache", "show", package_name],
+                capture_output=True, text=True, timeout=TIMEOUT_NETWORK
+            )
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+            logging.debug(f"Package availability check failed for '{package_name}': {e}")
+            return False
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # NETWORK CONNECTIVITY CHECK
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def check_network_connectivity(self) -> bool:
+        """
+        Verify internet connectivity before starting download operations.
+
+
+
+        Returns:
+            True if at least one connectivity test succeeds
+        """
+        self.banner("NETWORK CONNECTIVITY CHECK")
+        print(f"{Color.CYAN}Verifying internet connectivity...{Color.END}")
+
+        distro_id = self._get_os_release_field('ID').lower()
+
+        test_endpoints = []
+        if distro_id == 'debian':
+            test_endpoints.append(("Debian Repositories", "https://deb.debian.org"))
+        else:
+            test_endpoints.append(("Ubuntu Repositories", "https://archive.ubuntu.com"))
+        test_endpoints.append(("GitHub", "https://github.com"))
+        test_endpoints.append(("Flathub", "https://flathub.org"))
+
+        any_success = False
+        results = []
+
+        for name, url in test_endpoints:
+            try:
+                req = urllib.request.Request(url, method='HEAD')
+                with urllib.request.urlopen(req, timeout=TIMEOUT_NETWORK) as response:
+                    results.append((name, True, ""))
+                    any_success = True
+            except urllib.error.URLError as e:
+                results.append((name, False, str(e.reason)))
+            except urllib.error.HTTPError as e:
+                results.append((name, True, f"HTTP {e.code}"))
+                any_success = True
+            except OSError as e:
+                results.append((name, False, str(e)))
+
+        for name, success, detail in results:
+            if success:
+                print(f"  {Color.GREEN}✓{Color.END} {name}")
+            else:
+                print(f"  {Color.RED}✗{Color.END} {name} ({detail})")
+
+        if any_success:
+            print(f"\n{Color.GREEN}✓ Network connectivity verified{Color.END}")
+            logging.info("Network connectivity check passed")
+        else:
+            print(f"\n{Color.RED}✗ No internet connectivity detected{Color.END}")
+            print(f"{Color.YELLOW}  The script requires internet to download packages.{Color.END}")
+            logging.error("Network connectivity check FAILED")
+
+            if not self.confirm("Continue anyway? (downloads will likely fail)"):
+                print("Installation cancelled due to network issues.")
+                sys.exit(1)
+
+        return any_success
+
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # ROLLBACK ACTION RECORDING
+    # Records every reversible action so rollback can undo the installation.
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def record_action(self, action_type: ActionType, description: str,
+                      packages: List[str] = None, files: List[str] = None,
+                      backup_files: Dict[str, str] = None,
+                      reversal_commands: List[List[str]] = None,
+                      metadata: Dict[str, str] = None,
+                      success: bool = True):
+        """
+        Record a reversible action in the rollback manifest.
+
+
+        install operations. Each action stores enough info to reverse itself.
+
+        Args:
+            action_type: ActionType enum member
+            description: Human-readable description
+            packages: List of package names involved
+            files: List of file paths created or modified
+            backup_files: Dict of original_path -> backup_path
+            reversal_commands: Commands to execute for reversal
+            metadata: Additional context (URLs, versions, etc.)
+            success: Whether the action succeeded
+        """
+        if self.config.dry_run:
+            logging.info(f"[DRY RUN] Would record action: {action_type.value} -- {description}")
+            return
+
+        action = RollbackAction(
+            action_type=action_type.value,
+            timestamp=datetime.now().isoformat(),
+            description=description,
+            packages=packages or [],
+            files=files or [],
+            backup_files=backup_files or {},
+            reversal_commands=reversal_commands or [],
+            metadata=metadata or {},
+            success=success,
+        )
+
+        self.rollback_actions.append(action)
+        logging.info(f"Rollback recorded: [{action_type.value}] {description}")
+
+        # Auto-persist after each action so we survive crashes
+        self.save_rollback_manifest()
+
+    def _record_package_install(self, packages: List[str], description: str,
+                                success: bool = True):
+        """
+        Convenience: record an apt package installation.
+
+
+        """
+        self.record_action(
+            action_type=ActionType.APT_INSTALL,
+            description=description,
+            packages=packages,
+            reversal_commands=[["apt-get", "remove", "-y"] + packages],
+            success=success,
+        )
+
+    def _record_flatpak_install(self, app_id: str, description: str,
+                                success: bool = True):
+        """
+        Convenience: record a Flatpak application installation.
+
+
+        """
+        self.record_action(
+            action_type=ActionType.FLATPAK_INSTALL,
+            description=description,
+            packages=[app_id],
+            reversal_commands=[["flatpak", "uninstall", "-y", app_id]],
+            success=success,
+        )
+
+    def _record_repo_add(self, repo_identifier: str, files_added: List[str],
+                         description: str, success: bool = True):
+        """
+        Convenience: record a repository addition (PPA or .sources file).
+
+
+        """
+        reversal = []
+        for f in files_added:
+            reversal.append(["rm", "-f", f])
+        reversal.append(["apt-get", "update"])
+
+        self.record_action(
+            action_type=ActionType.REPO_ADD,
+            description=description,
+            files=files_added,
+            reversal_commands=reversal,
+            metadata={"repo_identifier": repo_identifier},
+            success=success,
+        )
+
+    def _record_file_create(self, file_path: str, description: str,
+                            success: bool = True):
+        """
+        Convenience: record a file created by the script.
+
+
+        """
+        self.record_action(
+            action_type=ActionType.FILE_CREATE,
+            description=description,
+            files=[file_path],
+            reversal_commands=[["rm", "-f", file_path]],
+            success=success,
+        )
+
+    def _record_file_modify(self, original_path: str, backup_path: str,
+                            description: str, success: bool = True):
+        """
+        Convenience: record modification of an existing file.
+
+
+        """
+        self.record_action(
+            action_type=ActionType.FILE_MODIFY,
+            description=description,
+            files=[original_path],
+            backup_files={original_path: backup_path},
+            reversal_commands=[["cp", "-f", backup_path, original_path]],
+            success=success,
+        )
+
+    def _auto_record_from_command(self, cmd, description: str,
+                                  success: bool):
+        """
+        Auto-detect and record apt/flatpak installs from run_command calls.
+
+
+        methods gain rollback tracking without individual modification.
+
+        Args:
+            cmd: The command that was executed (list or string)
+            description: Human-readable description
+            success: Whether the command succeeded
+        """
+        if self.config.dry_run or not success:
+            return
+
+        # Normalize command to list form for inspection
+        if isinstance(cmd, str):
+            cmd_parts = cmd.split()
+        else:
+            cmd_parts = [str(c) for c in cmd]
+
+        if len(cmd_parts) < 3:
+            return
+
+        # Detect apt-get install commands
+        if (cmd_parts[0] == 'apt-get' and 'install' in cmd_parts and
+                '-y' in cmd_parts):
+            # Extract package names (everything after 'install' that isn't a flag)
+            install_idx = cmd_parts.index('install')
+            packages = [
+                p for p in cmd_parts[install_idx + 1:]
+                if not p.startswith('-') and p != '-y'
+            ]
+            if packages:
+                self._record_package_install(packages, description, success)
+            return
+
+        # Detect flatpak install commands
+        if (cmd_parts[0] == 'flatpak' and 'install' in cmd_parts and
+                '-y' in cmd_parts):
+            # Last argument is typically the app ID
+            app_id = cmd_parts[-1]
+            if '.' in app_id and not app_id.startswith('-'):
+                self._record_flatpak_install(app_id, description, success)
+            return
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # ROLLBACK MANIFEST PERSISTENCE
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def save_rollback_manifest(self):
+        """
+        Persist the rollback manifest to disk as versioned JSON.
+
+
+        Manifest survives script crashes and can be loaded for later rollback.
+        """
+        if self.config.dry_run:
+            return
+
+        manifest = {
+            "schema_version": ROLLBACK_SCHEMA_VERSION,
+            "session_id": self._session_id,
+            "script_version": SCRIPT_VERSION,
+            "started_at": self.rollback_actions[0].timestamp if self.rollback_actions else "",
+            "last_updated": datetime.now().isoformat(),
+            "distro_info": {
+                "name": self.system_info.distro_name,
+                "version": self.system_info.distro_version,
+                "id": self.system_info.distro_id,
+            },
+            "action_count": len(self.rollback_actions),
+            "actions": [],
+        }
+
+        for action in self.rollback_actions:
+            manifest["actions"].append({
+                "action_type": action.action_type,
+                "timestamp": action.timestamp,
+                "description": action.description,
+                "packages": action.packages,
+                "files": action.files,
+                "backup_files": action.backup_files,
+                "reversal_commands": action.reversal_commands,
+                "metadata": action.metadata,
+                "success": action.success,
+            })
+
+        try:
+            # Write atomically: write to temp file then rename
+            tmp_path = str(ROLLBACK_FILE) + ".tmp"
+            with open(tmp_path, 'w') as f:
+                json.dump(manifest, f, indent=2)
+
+            os.replace(tmp_path, str(ROLLBACK_FILE))
+
+            uid, gid = get_real_user_uid_gid()
+            os.chown(ROLLBACK_FILE, uid, gid)
+
+            logging.debug(f"Rollback manifest saved: {len(self.rollback_actions)} actions")
+        except (IOError, OSError) as e:
+            logging.error(f"Could not save rollback manifest: {e}")
+
+    def load_rollback_manifest(self) -> bool:
+        """
+        Load a previous rollback manifest from disk.
+
+
+
+        Returns:
+            True if manifest was loaded successfully
+        """
+        if not ROLLBACK_FILE.exists():
+            logging.debug("No rollback manifest found")
+            return False
+
+        try:
+            with open(ROLLBACK_FILE, 'r') as f:
+                manifest = json.load(f)
+
+            schema = manifest.get("schema_version", "0")
+            if schema != ROLLBACK_SCHEMA_VERSION:
+                logging.warning(
+                    f"Rollback manifest schema mismatch: "
+                    f"found v{schema}, expected v{ROLLBACK_SCHEMA_VERSION}"
+                )
+
+            # Only load actions from previous sessions if we are in rollback mode
+            # During normal runs, we start fresh and append
+            if hasattr(self, 'args') and getattr(self.args, 'rollback', False):
+                self.rollback_actions = []
+                for entry in manifest.get("actions", []):
+                    action = RollbackAction(
+                        action_type=entry.get("action_type", ""),
+                        timestamp=entry.get("timestamp", ""),
+                        description=entry.get("description", ""),
+                        packages=entry.get("packages", []),
+                        files=entry.get("files", []),
+                        backup_files=entry.get("backup_files", {}),
+                        reversal_commands=entry.get("reversal_commands", []),
+                        metadata=entry.get("metadata", {}),
+                        success=entry.get("success", True),
+                    )
+                    self.rollback_actions.append(action)
+
+                logging.info(
+                    f"Loaded rollback manifest: {len(self.rollback_actions)} actions "
+                    f"from session {manifest.get('session_id', 'unknown')}"
+                )
+            else:
+                logging.info(
+                    f"Previous rollback manifest exists with "
+                    f"{manifest.get('action_count', 0)} actions "
+                    f"(session {manifest.get('session_id', 'unknown')})"
+                )
+
+            return True
+
+        except (json.JSONDecodeError, KeyError, IOError) as e:
+            logging.error(f"Could not load rollback manifest: {e}")
+            return False
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # GPU DETECTION
+    # ═══════════════════════════════════════════════════════════════════════════
+
     def detect_gpu(self):
         """
         Detect GPU type
-        
-        PRESERVED FROM ORIGINAL: All lspci parsing and glxinfo cross-validation
-        ENHANCED: Better false-positive prevention, more VM types
+
+        All lspci parsing and glxinfo cross-validation
+        Better false-positive prevention, more VM types
         """
         self.banner("GPU DETECTION")
-        
-        # First check if running in a VM - PRESERVED FROM ORIGINAL
+
+        # First check if running in a VM
         vm_type = self.detect_virtualization()
         if vm_type:
             print(f"{Color.YELLOW}⚠ Virtual Machine Detected: {vm_type}{Color.END}")
@@ -1269,137 +2510,105 @@ class GamingSetup:
             self.hardware_info.vm_type = self._vm_type_str_to_enum(vm_type)
             self.hardware_info.gpu_vendor = GPUVendor.VIRTUAL
             return vm_type.lower()
-        
+
         try:
-            # Check actual GPU hardware via lspci - PRESERVED FROM ORIGINAL
-            result = subprocess.run(['lspci'], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['lspci'], capture_output=True, text=True, timeout=TIMEOUT_QUICK)
             lspci_output = result.stdout.lower()
-            
-            # Filter lspci to only VGA/3D/Display lines - PRESERVED FROM ORIGINAL
-            # This avoids false positives from Intel CPUs, network cards, etc.
+
             gpu_lines = []
             for line in lspci_output.split('\n'):
                 if any(keyword in line for keyword in ['vga', '3d', 'display']):
                     gpu_lines.append(line)
-            
+
             gpu_info = ' '.join(gpu_lines).lower()
-            
-            # Also check OpenGL renderer for more accurate detection - PRESERVED FROM ORIGINAL
+
             gl_info = ""
             try:
-                gl_result = subprocess.run(['glxinfo'], capture_output=True, 
-                                          text=True, timeout=5)
+                gl_result = subprocess.run(['glxinfo'], capture_output=True,
+                                          text=True, timeout=TIMEOUT_QUICK)
                 if gl_result.returncode == 0:
-                    # Extract just the renderer line
                     for line in gl_result.stdout.split('\n'):
                         if 'OpenGL renderer' in line:
                             gl_info = line.lower()
                             break
-            except:
+            except (FileNotFoundError, subprocess.TimeoutExpired):
                 pass
-            
+
             logging.info(f"GPU detection - lspci VGA: {gpu_info}")
             logging.info(f"GPU detection - GL renderer: {gl_info}")
-            
-            # Check for virtual/emulated GPUs first - PRESERVED FROM ORIGINAL
-            if any(vm_indicator in gpu_info or vm_indicator in gl_info 
+
+            # Check for virtual/emulated GPUs first
+            if any(vm_indicator in gpu_info or vm_indicator in gl_info
                    for vm_indicator in ['vmware', 'virtualbox', 'qxl', 'virtio', 'svga3d']):
                 print(f"{Color.YELLOW}⚠ Virtual GPU detected{Color.END}")
                 logging.info("Virtual GPU detected in hardware scan")
                 self.hardware_info.gpu_vendor = GPUVendor.VIRTUAL
                 return 'generic'
-            
-            # Check for NVIDIA (most specific) - PRESERVED FROM ORIGINAL
+
+            # Check for NVIDIA
             if 'nvidia' in gpu_info or 'nvidia' in gl_info:
                 print(f"{Color.GREEN}✓ NVIDIA GPU detected{Color.END}")
                 logging.info("NVIDIA GPU detected")
                 self.hardware_info.gpu_vendor = GPUVendor.NVIDIA
-                # Extract model - ENHANCED
                 for line in gpu_lines:
                     if 'nvidia' in line:
                         self.hardware_info.gpu_model = self._extract_gpu_model(line)
                         break
                 return 'nvidia'
-            
-            # Check for AMD/Radeon - PRESERVED FROM ORIGINAL
+
+            # Check for AMD/Radeon
             if any(amd_indicator in gpu_info or amd_indicator in gl_info
                    for amd_indicator in ['amd', 'radeon', 'ati']):
                 print(f"{Color.GREEN}✓ AMD GPU detected{Color.END}")
                 logging.info("AMD GPU detected")
                 self.hardware_info.gpu_vendor = GPUVendor.AMD
-                # Extract model - ENHANCED
                 for line in gpu_lines:
                     if any(amd in line for amd in ['amd', 'radeon', 'ati']):
                         self.hardware_info.gpu_model = self._extract_gpu_model(line)
                         break
                 return 'amd'
-            
-            # Check for Intel (least specific, check last) - PRESERVED FROM ORIGINAL
-            if ('intel' in gpu_info and any(gpu_term in gpu_info 
+
+            # Check for Intel
+            if ('intel' in gpu_info and any(gpu_term in gpu_info
                 for gpu_term in ['graphics', 'hd', 'iris', 'uhd', 'arc'])):
                 print(f"{Color.GREEN}✓ Intel GPU detected{Color.END}")
                 logging.info("Intel GPU detected")
                 self.hardware_info.gpu_vendor = GPUVendor.INTEL
-                # Extract model - ENHANCED
                 for line in gpu_lines:
                     if 'intel' in line:
                         self.hardware_info.gpu_model = self._extract_gpu_model(line)
                         break
                 return 'intel'
-            
-            # If we found GPU lines but couldn't identify vendor - PRESERVED FROM ORIGINAL
+
             if gpu_lines:
                 print(f"{Color.YELLOW}! Generic/Unknown GPU detected{Color.END}")
                 print(f"{Color.CYAN}  GPU info: {gpu_lines[0] if gpu_lines else 'unknown'}{Color.END}")
                 logging.info(f"Unknown GPU type: {gpu_lines}")
                 self.hardware_info.gpu_vendor = GPUVendor.UNKNOWN
                 return 'generic'
-            
-            # No GPU detected at all - PRESERVED FROM ORIGINAL
+
             print(f"{Color.YELLOW}! No GPU detected{Color.END}")
             self.hardware_info.gpu_vendor = GPUVendor.UNKNOWN
             return 'unknown'
-                
-        except Exception as e:
+
+        except (OSError, subprocess.SubprocessError, ValueError) as e:
             logging.error(f"GPU detection failed: {e}")
             self.hardware_info.gpu_vendor = GPUVendor.UNKNOWN
             return 'unknown'
-    
+
     def _extract_gpu_model(self, lspci_line: str) -> str:
-        """
-        Extract GPU model from lspci line
-        
-        ENHANCED: New method for better hardware info display
-        
-        Args:
-            lspci_line: Line from lspci output
-            
-        Returns:
-            Extracted GPU model name
-        """
-        # Remove PCI address and VGA controller prefix
+        """Extract GPU model from lspci line"""
         parts = lspci_line.split(':')
         if len(parts) >= 3:
             model = ':'.join(parts[2:]).strip()
-            # Clean up common prefixes
             model = model.replace('vga compatible controller:', '').strip()
             model = model.replace('3d controller:', '').strip()
             model = model.replace('display controller:', '').strip()
-            return model[:80]  # Limit length
+            return model[:80]
         return "Unknown Model"
-    
+
     def _vm_type_str_to_enum(self, vm_str: str) -> VMType:
-        """
-        Convert VM type string to enum
-        
-        ENHANCED: Helper for better type safety
-        
-        Args:
-            vm_str: VM type string
-            
-        Returns:
-            VMType enum value
-        """
+        """Convert VM type string to enum"""
         vm_lower = vm_str.lower()
         if 'vmware' in vm_lower:
             return VMType.VMWARE
@@ -1416,1579 +2625,1798 @@ class GamingSetup:
         elif 'parallels' in vm_lower:
             return VMType.PARALLELS
         return VMType.NONE
-    
+
     def detect_virtualization(self):
         """
         Detect if running in a virtual machine and which type
-        
-        PRESERVED FROM ORIGINAL: All three detection methods
-        ENHANCED: More VM types, better error handling
+
+        All three detection methods
+        More VM types, better error handling
         """
         try:
-            # Method 1: systemd-detect-virt (most reliable) - PRESERVED FROM ORIGINAL
-            result = subprocess.run(['systemd-detect-virt'], 
-                                  capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['systemd-detect-virt'],
+                                  capture_output=True, text=True, timeout=TIMEOUT_QUICK)
             virt_type = result.stdout.strip()
-            
+
             if virt_type and virt_type != 'none':
-                # Map common virtualization types to friendly names - PRESERVED FROM ORIGINAL
                 virt_map = {
-                    'vmware': 'VMware',
-                    'kvm': 'KVM',
-                    'qemu': 'QEMU',
-                    'virtualbox': 'VirtualBox',
-                    'oracle': 'VirtualBox',
-                    'microsoft': 'Hyper-V',
-                    'xen': 'Xen',
-                    'bochs': 'Bochs',
+                    'vmware': 'VMware', 'kvm': 'KVM', 'qemu': 'QEMU',
+                    'virtualbox': 'VirtualBox', 'oracle': 'VirtualBox',
+                    'microsoft': 'Hyper-V', 'xen': 'Xen', 'bochs': 'Bochs',
                     'parallels': 'Parallels'
                 }
                 return virt_map.get(virt_type.lower(), virt_type)
-        except:
+        except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
-        
+
         try:
-            # Method 2: Check dmesg for hypervisor - PRESERVED FROM ORIGINAL
-            result = subprocess.run(['dmesg'], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['dmesg'], capture_output=True, text=True, timeout=TIMEOUT_QUICK)
             dmesg = result.stdout.lower()
-            
+
             if 'vmware' in dmesg:
                 return 'VMware'
             elif 'virtualbox' in dmesg:
                 return 'VirtualBox'
             elif 'hypervisor detected' in dmesg:
                 return 'VM'
-        except:
+        except (FileNotFoundError, subprocess.TimeoutExpired, PermissionError):
             pass
-        
+
         try:
-            # Method 3: Check lspci for virtual graphics - PRESERVED FROM ORIGINAL
-            result = subprocess.run(['lspci'], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['lspci'], capture_output=True, text=True, timeout=TIMEOUT_QUICK)
             lspci = result.stdout.lower()
-            
+
             if 'vmware' in lspci:
                 return 'VMware'
             elif 'virtualbox' in lspci:
                 return 'VirtualBox'
             elif 'qxl' in lspci or 'virtio' in lspci:
                 return 'KVM/QEMU'
-        except:
+        except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
-        
+
         return None
 
-# END OF PART 3
-# Continue with Part 4 for driver installation and platform installation methods
-# PART 4: Driver Installation, Gaming Platforms, and Compatibility Layers
-# All original functionality preserved with new additions
+    # ═══════════════════════════════════════════════════════════════════════════
+    # DYNAMIC NVIDIA DRIVER DETECTION
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def _detect_installed_nvidia_driver(self) -> Optional[str]:
+        """
+        Dynamically detect any installed NVIDIA driver package.
+
+
+        """
+        try:
+            result = subprocess.run(
+                ["dpkg", "-l"], capture_output=True, text=True, timeout=TIMEOUT_API
+            )
+            if result.returncode == 0:
+                for line in result.stdout.split('\n'):
+                    match = re.match(r'^ii\s+(nvidia-driver-\d+)\s+', line)
+                    if match:
+                        package_name = match.group(1)
+                        logging.info(f"Dynamic NVIDIA detection: Found installed '{package_name}'")
+                        return package_name
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+            logging.warning(f"Dynamic NVIDIA detection via dpkg failed: {e}")
+        return None
+
+    def _get_recommended_nvidia_driver(self) -> Optional[str]:
+        """
+        Get the system-recommended NVIDIA driver using distro-native tools.
+
+
+        """
+        distro_id = self._get_os_release_field('ID').lower()
+        distro_id_like = self._get_os_release_field('ID_LIKE').lower()
+        is_ubuntu_family = (
+            distro_id == 'ubuntu' or
+            distro_id in ('pop', 'zorin', 'elementary', 'linuxmint') or
+            'ubuntu' in distro_id_like
+        )
+
+        # Method 1: ubuntu-drivers (Ubuntu and derivatives)
+        if is_ubuntu_family:
+            drivers_pkg = self._resolve_package_name("ubuntu-drivers-common")
+            if drivers_pkg and self._check_package_available(drivers_pkg):
+                if not self.is_package_installed(drivers_pkg):
+                    self.run_command(
+                        ["apt-get", "install", "-y", drivers_pkg],
+                        f"Installing {drivers_pkg} for driver detection",
+                        check=False
+                    )
+
+                try:
+                    result = subprocess.run(
+                        ["ubuntu-drivers", "devices"],
+                        capture_output=True, text=True, timeout=TIMEOUT_API
+                    )
+                    if result.returncode == 0:
+                        recommended = None
+                        for line in result.stdout.split('\n'):
+                            if 'recommended' in line.lower():
+                                match = re.search(r'(nvidia-driver-\d+)', line)
+                                if match:
+                                    return match.group(1)
+                            elif 'nvidia-driver-' in line and recommended is None:
+                                match = re.search(r'(nvidia-driver-\d+)', line)
+                                if match:
+                                    recommended = match.group(1)
+                        if recommended:
+                            return recommended
+                except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+                    logging.warning(f"ubuntu-drivers detection failed: {e}")
+
+        # Method 2: apt-cache search (Debian and fallback)
+        try:
+            result = subprocess.run(
+                ["apt-cache", "search", "^nvidia-driver-[0-9]"],
+                capture_output=True, text=True, timeout=TIMEOUT_API
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                available_drivers = []
+                for line in result.stdout.strip().split('\n'):
+                    match = re.match(r'^(nvidia-driver-(\d+))\s', line)
+                    if match:
+                        available_drivers.append((int(match.group(2)), match.group(1)))
+
+                if available_drivers:
+                    available_drivers.sort(reverse=True)
+                    best = available_drivers[0][1]
+                    logging.info(f"apt-cache NVIDIA: best = '{best}' (from {len(available_drivers)} options)")
+                    return best
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+            logging.warning(f"apt-cache NVIDIA search failed: {e}")
+
+        # Method 3: meta-package fallback
+        if self._check_package_available("nvidia-driver"):
+            return "nvidia-driver"
+
+        return None
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # SYSTEM UPDATE - PRESERVED FROM ORIGINAL
+    # NVIDIA DRIVER INSTALLATION — DYNAMIC
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
+    def install_nvidia_drivers(self):
+        """
+        Install NVIDIA proprietary drivers with fully dynamic detection.
+
+        Dynamic version detection, no hardcoded versions.
+        Handles prompting, nvidia-smi display, and reinstall/upgrade flow.
+        """
+        self.banner("NVIDIA DRIVER INSTALLATION")
+
+        installed_driver = self._detect_installed_nvidia_driver()
+
+        if installed_driver:
+            try:
+                result = subprocess.run(
+                    ["nvidia-smi"], capture_output=True, text=True, timeout=TIMEOUT_NETWORK
+                )
+                if result.returncode == 0:
+                    for line in result.stdout.split('\n'):
+                        if 'Driver Version:' in line:
+                            version = line.split('Driver Version:')[1].split()[0]
+                            print(f"{Color.GREEN}✓ NVIDIA drivers already installed "
+                                  f"(version: {version}, package: {installed_driver}){Color.END}")
+                            break
+                    else:
+                        print(f"{Color.GREEN}✓ NVIDIA drivers already installed "
+                              f"(package: {installed_driver}){Color.END}")
+
+                    if not self.confirm("Reinstall/update NVIDIA drivers?"):
+                        return
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                print(f"{Color.YELLOW}⚠ NVIDIA driver package '{installed_driver}' "
+                      f"found but driver not loaded{Color.END}")
+                if not self.confirm("Reinstall NVIDIA drivers?"):
+                    return
+
+        recommended = self._get_recommended_nvidia_driver()
+
+        if not recommended:
+            print(f"{Color.RED}✗ Could not determine appropriate NVIDIA driver{Color.END}")
+            print(f"{Color.CYAN}  Try: sudo apt-get install nvidia-driver{Color.END}")
+            logging.error("NVIDIA install: could not determine recommended driver")
+            return
+
+        print(f"{Color.CYAN}Recommended NVIDIA driver: {recommended}{Color.END}")
+        logging.info(f"NVIDIA install: selected driver = '{recommended}'")
+
+        distro_id = self._get_os_release_field('ID').lower()
+        distro_id_like = self._get_os_release_field('ID_LIKE').lower()
+        is_ubuntu_family = (
+            distro_id == 'ubuntu' or
+            distro_id in ('pop', 'zorin', 'elementary', 'linuxmint') or
+            'ubuntu' in distro_id_like
+        )
+
+        if is_ubuntu_family and self.is_package_installed("ubuntu-drivers-common"):
+            print(f"{Color.CYAN}Using ubuntu-drivers for optimal installation...{Color.END}")
+            success, _, _ = self.run_command(
+                ["ubuntu-drivers", "autoinstall"],
+                "Installing NVIDIA drivers via ubuntu-drivers",
+                check=False
+            )
+            if not success:
+                print(f"{Color.YELLOW}⚠ ubuntu-drivers failed, trying direct install...{Color.END}")
+                self.run_command(
+                    ["apt-get", "install", "-y", recommended],
+                    f"Installing {recommended} via apt"
+                )
+        else:
+            self.run_command(
+                ["apt-get", "install", "-y", recommended],
+                f"Installing {recommended}"
+            )
+
+        companion_packages = []
+        if self._check_package_available("nvidia-settings"):
+            companion_packages.append("nvidia-settings")
+        if is_ubuntu_family and self._check_package_available("nvidia-prime"):
+            companion_packages.append("nvidia-prime")
+
+        if companion_packages:
+            self.run_command(
+                ["apt-get", "install", "-y"] + companion_packages,
+                f"Installing NVIDIA companion tools ({', '.join(companion_packages)})",
+                check=False
+            )
+
+        print(f"{Color.GREEN}✓ NVIDIA drivers installed{Color.END}")
+        logging.info("NVIDIA driver installation complete")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # AMD DRIVER INSTALLATION — DISTRO-AWARE
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def install_amd_drivers(self):
+        """
+        Install AMD Mesa/AMDGPU drivers with distro-aware package selection.
+
+        Availability checking, Debian firmware awareness.
+        Installs core Mesa/Vulkan packages for AMD GPU support.
+        """
+        self.banner("AMD DRIVER INSTALLATION")
+
+        print(f"{Color.CYAN}Installing AMD Mesa and Vulkan drivers...{Color.END}")
+
+        distro_id = self._get_os_release_field('ID').lower()
+        distro_id_like = self._get_os_release_field('ID_LIKE').lower()
+        is_debian_native = distro_id == 'debian' and 'ubuntu' not in distro_id_like
+
+        core_packages = [
+            "mesa-vulkan-drivers", "mesa-vulkan-drivers:i386",
+            "libvulkan1", "libvulkan1:i386", "vulkan-tools", "mesa-utils",
+        ]
+
+        if is_debian_native:
+            if self._check_package_available("firmware-amd-graphics"):
+                core_packages.append("firmware-amd-graphics")
+            else:
+                print(f"{Color.YELLOW}⚠ firmware-amd-graphics not available. "
+                      f"Ensure 'non-free' is enabled in sources.list{Color.END}")
+
+        optional_packages = ["libdrm-amdgpu1", "xserver-xorg-video-amdgpu", "radeontop"]
+        available_optional = [pkg for pkg in optional_packages if self._check_package_available(pkg)]
+
+        self.run_command(
+            ["apt-get", "install", "-y"] + core_packages,
+            "Installing AMD Mesa and Vulkan core drivers"
+        )
+
+        if available_optional:
+            self.run_command(
+                ["apt-get", "install", "-y"] + available_optional,
+                f"Installing AMD optional packages ({', '.join(available_optional)})",
+                check=False
+            )
+
+        print(f"{Color.GREEN}✓ AMD drivers installed{Color.END}")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # INTEL DRIVER INSTALLATION — DISTRO-AWARE
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def install_intel_drivers(self):
+        """
+        Install Intel graphics drivers with distro-aware package selection.
+
+        Availability checking, Arc GPU support, Debian firmware.
+        Installs core Mesa/Intel packages with media acceleration support.
+        """
+        self.banner("INTEL DRIVER INSTALLATION")
+
+        print(f"{Color.CYAN}Installing Intel graphics drivers...{Color.END}")
+
+        distro_id = self._get_os_release_field('ID').lower()
+        distro_id_like = self._get_os_release_field('ID_LIKE').lower()
+        is_debian_native = distro_id == 'debian' and 'ubuntu' not in distro_id_like
+
+        core_packages = [
+            "mesa-vulkan-drivers", "mesa-vulkan-drivers:i386",
+            "libvulkan1", "libvulkan1:i386", "mesa-utils",
+        ]
+
+        for pkg in ["intel-media-va-driver", "i965-va-driver"]:
+            if self._check_package_available(pkg):
+                core_packages.append(pkg)
+
+        if is_debian_native:
+            for fw_pkg in ["firmware-misc-nonfree", "intel-microcode"]:
+                if self._check_package_available(fw_pkg):
+                    core_packages.append(fw_pkg)
+
+        gpu_model = self.hardware_info.gpu_model.lower()
+        if 'arc' in gpu_model or 'a770' in gpu_model or 'a750' in gpu_model:
+            print(f"{Color.CYAN}  Intel Arc GPU detected — ensuring latest Mesa support{Color.END}")
+            if self._check_package_available("intel-opencl-icd"):
+                core_packages.append("intel-opencl-icd")
+
+        self.run_command(
+            ["apt-get", "install", "-y"] + core_packages,
+            "Installing Intel graphics drivers"
+        )
+
+        print(f"{Color.GREEN}✓ Intel drivers installed{Color.END}")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # VM TOOLS — DISTRO-AWARE
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def install_vm_tools(self, vm_type):
+        """
+        Install VM guest tools with distro-aware package availability checking.
+
+        Package availability verification before install.
+        Supports VMware, VirtualBox, KVM/QEMU, Hyper-V, Xen, and Parallels.
+        """
+        self.banner("VM GUEST TOOLS INSTALLATION")
+
+        print(f"{Color.CYAN}Detected {vm_type} — Installing guest tools...{Color.END}")
+
+        vm_lower = vm_type.lower()
+
+        if 'vmware' in vm_lower:
+            self._install_vm_packages("VMware",
+                ["open-vm-tools", "open-vm-tools-desktop"],
+                optional=["mesa-utils"])
+        elif 'virtualbox' in vm_lower:
+            self._install_vm_packages("VirtualBox",
+                ["virtualbox-guest-utils", "virtualbox-guest-x11"],
+                optional=["virtualbox-guest-dkms", "mesa-utils"])
+        elif 'kvm' in vm_lower or 'qemu' in vm_lower:
+            self._install_vm_packages("KVM/QEMU",
+                ["qemu-guest-agent", "spice-vdagent"],
+                optional=["xserver-xorg-video-qxl", "mesa-utils"])
+        elif 'hyper-v' in vm_lower or 'microsoft' in vm_lower:
+            self._install_vm_packages("Hyper-V",
+                ["hyperv-daemons"],
+                optional=["linux-tools-virtual", "linux-cloud-tools-virtual"])
+        elif 'xen' in vm_lower:
+            self._install_vm_packages("Xen", [],
+                optional=["xe-guest-utilities"])
+        elif 'parallels' in vm_lower:
+            print(f"{Color.CYAN}Parallels Tools should be installed from the "
+                  f"Parallels Desktop menu: Actions → Install Parallels Tools{Color.END}")
+        else:
+            self.install_generic_vm_graphics()
+
+        print(f"{Color.GREEN}✓ {vm_type} guest tools installation complete{Color.END}")
+
+    def _install_vm_packages(self, vm_name: str, required: list, optional: list = None):
+        """
+        Install VM packages with availability checking.
+
+
+        """
+        optional = optional or []
+
+        available_required = [pkg for pkg in required if self._check_package_available(pkg)]
+        missing_required = [pkg for pkg in required if not self._check_package_available(pkg)]
+
+        if missing_required:
+            print(f"{Color.YELLOW}⚠ Some {vm_name} packages not available: "
+                  f"{', '.join(missing_required)}{Color.END}")
+
+        if available_required:
+            self.run_command(
+                ["apt-get", "install", "-y"] + available_required,
+                f"Installing {vm_name} guest tools"
+            )
+
+        available_optional = [pkg for pkg in optional if self._check_package_available(pkg)]
+        if available_optional:
+            self.run_command(
+                ["apt-get", "install", "-y"] + available_optional,
+                f"Installing {vm_name} optional packages",
+                check=False
+            )
+
+    def install_generic_vm_graphics(self):
+        """Install generic VM graphics support - """
+        packages = [
+            "mesa-utils", "mesa-utils-extra", "libgl1-mesa-dri",
+            "libgl1-mesa-dri:i386", "mesa-vulkan-drivers", "mesa-vulkan-drivers:i386"
+        ]
+        self.run_command(
+            ["apt-get", "install", "-y"] + packages,
+            "Installing generic VM graphics drivers"
+        )
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SYSTEM UPDATE
+    # ═══════════════════════════════════════════════════════════════════════════
+
     def update_system(self):
-        """
-        Update system packages
-        
-        PRESERVED FROM ORIGINAL: Exact same update sequence
-        ENHANCED: Added skip_update option
-        """
+        """Update system packages - """
         if self.config.skip_update:
             print(f"{Color.YELLOW}Skipping system update as requested{Color.END}")
             return
-        
+
         self.banner("SYSTEM UPDATE")
-        
-        # PRESERVED FROM ORIGINAL: Exact same commands
+
         commands = [
             (["apt-get", "update"], "Updating package lists"),
             (["apt-get", "upgrade", "-y"], "Upgrading installed packages"),
             (["apt-get", "autoremove", "-y"], "Removing unnecessary packages"),
             (["apt-get", "autoclean"], "Cleaning package cache")
         ]
-        
+
         for cmd, desc in commands:
             self.run_command(cmd, desc)
-    
+
     def enable_32bit_support(self):
-        """
-        Enable 32-bit architecture support (required for many games)
-        
-        PRESERVED FROM ORIGINAL: Identical functionality
-        """
-        self.banner("32-BIT ARCHITECTURE SUPPORT")
-        
-        self.run_command(
-            ["dpkg", "--add-architecture", "i386"],
-            "Enabling i386 architecture"
-        )
+        """Enable 32-bit architecture support - """
+        self.banner("32-BIT SUPPORT")
+
+        result = subprocess.run(["dpkg", "--print-foreign-architectures"],
+                              capture_output=True, text=True, timeout=TIMEOUT_QUICK)
+
+        if 'i386' in result.stdout:
+            print(f"{Color.GREEN}✓ 32-bit support already enabled{Color.END}")
+            return
+
+        self.run_command(["dpkg", "--add-architecture", "i386"],
+                        "Adding i386 architecture")
         self.run_command(["apt-get", "update"], "Updating package lists")
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # NVIDIA DRIVER INSTALLATION - PRESERVED FROM ORIGINAL
+    # ESSENTIAL PACKAGES
     # ═══════════════════════════════════════════════════════════════════════════
-    
-    def install_nvidia_drivers(self):
+
+    def install_essential_packages(self):
         """
-        Install NVIDIA proprietary drivers
-        
-        PRESERVED FROM ORIGINAL: All version checking and prompting logic
+        Install essential gaming packages.
+
+        Same package list and fallback logic.
+        Pre-flight validation via _preflight_packages()
+        to skip unavailable packages cleanly instead of letting apt fail.
         """
-        self.banner("NVIDIA DRIVER INSTALLATION")
-        
-        # Check if already installed - PRESERVED FROM ORIGINAL
-        nvidia_installed = self.is_package_installed("nvidia-driver-550") or \
-                          self.is_package_installed("nvidia-driver-545") or \
-                          self.is_package_installed("nvidia-driver-535")
-        
-        if nvidia_installed:
-            try:
-                result = subprocess.run(["nvidia-smi"], capture_output=True, text=True, timeout=5)
-                if result.returncode == 0:
-                    # Extract driver version from nvidia-smi output - PRESERVED FROM ORIGINAL
-                    for line in result.stdout.split('\n'):
-                        if 'Driver Version:' in line:
-                            version = line.split('Driver Version:')[1].split()[0]
-                            print(f"{Color.GREEN}✓ NVIDIA drivers already installed (version: {version}){Color.END}")
-                            break
-                    else:
-                        print(f"{Color.GREEN}✓ NVIDIA drivers already installed{Color.END}")
-                    
-                    if not self.confirm("Reinstall NVIDIA drivers?"):
-                        return
-            except:
-                print(f"{Color.YELLOW}⚠ NVIDIA drivers installed but not loaded{Color.END}")
-                if not self.confirm("Reinstall NVIDIA drivers?"):
-                    return
-        
-        print("Installing NVIDIA driver (latest stable)...")
-        
-        # PRESERVED FROM ORIGINAL: Exact same installation sequence
-        commands = [
-            (["apt-get", "install", "-y", "ubuntu-drivers-common"], "Installing driver manager"),
-            (["ubuntu-drivers", "autoinstall"], "Installing recommended NVIDIA drivers"),
-            (["apt-get", "install", "-y", "nvidia-settings", "nvidia-prime"], "Installing NVIDIA utilities")
-        ]
-        
-        for cmd, desc in commands:
-            self.run_command(cmd, desc)
-        
-        print(f"{Color.YELLOW}Note: System reboot required for NVIDIA drivers to take effect{Color.END}")
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # AMD DRIVER INSTALLATION - PRESERVED FROM ORIGINAL
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def install_amd_drivers(self):
-        """
-        Install AMD drivers
-        
-        PRESERVED FROM ORIGINAL: Exact same package list
-        """
-        self.banner("AMD DRIVER INSTALLATION")
-        
-        print("AMD drivers are typically included in the Linux kernel.")
-        print("Installing Mesa drivers and Vulkan support...")
-        
-        # PRESERVED FROM ORIGINAL: Exact same packages
+        self.banner("ESSENTIAL PACKAGES")
+
+        # Resolve distro-specific package names
+        cpupower_pkg = self._resolve_package_name("linux-cpupower")
+
         packages = [
-            "mesa-vulkan-drivers",
-            "mesa-vulkan-drivers:i386",
-            "libvulkan1",
-            "libvulkan1:i386",
-            "vulkan-tools",
-            "mesa-utils"
+            "curl", "wget",
+            "libgl1-mesa-dri:i386", "mesa-vulkan-drivers", "mesa-vulkan-drivers:i386",
+            "pulseaudio", "pavucontrol",
+            "joystick", "jstest-gtk",
+            "fonts-liberation", "fonts-wine",
+            cpupower_pkg,
+            "xboxdrv", "antimicrox"
         ]
-        
-        self.run_command(
-            ["apt-get", "install", "-y"] + packages,
-            "Installing AMD Mesa and Vulkan drivers"
-        )
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # INTEL DRIVER INSTALLATION - PRESERVED FROM ORIGINAL
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def install_intel_drivers(self):
-        """
-        Install Intel drivers
-        
-        PRESERVED FROM ORIGINAL: Exact same package list
-        """
-        self.banner("INTEL DRIVER INSTALLATION")
-        
-        print("Installing Intel graphics drivers...")
-        
-        # PRESERVED FROM ORIGINAL: Exact same packages
-        packages = [
-            "mesa-vulkan-drivers",
-            "mesa-vulkan-drivers:i386",
-            "libvulkan1",
-            "libvulkan1:i386",
-            "intel-media-va-driver",
-            "i965-va-driver"
-        ]
-        
-        self.run_command(
-            ["apt-get", "install", "-y"] + packages,
-            "Installing Intel graphics drivers"
-        )
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # VM TOOLS INSTALLATION - PRESERVED FROM ORIGINAL WITH ENHANCEMENTS
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def install_vm_tools(self, vm_type):
-        """
-        Install VM guest tools based on hypervisor type
-        
-        PRESERVED FROM ORIGINAL: All VMware, VirtualBox, and KVM logic
-        ENHANCED: Added Hyper-V, Xen support
-        """
-        self.banner("VM GUEST TOOLS INSTALLATION")
-        
-        print(f"{Color.CYAN}Detected {vm_type} - Installing guest tools...{Color.END}")
-        
-        if 'vmware' in vm_type.lower():
-            self.install_vmware_tools()
-        elif 'virtualbox' in vm_type.lower():
-            self.install_virtualbox_tools()
-        elif 'kvm' in vm_type.lower() or 'qemu' in vm_type.lower():
-            self.install_kvm_tools()
-        elif 'hyper-v' in vm_type.lower() or 'microsoft' in vm_type.lower():
-            self.install_hyperv_tools()  # ENHANCED: New
-        elif 'xen' in vm_type.lower():
-            self.install_xen_tools()  # ENHANCED: New
-        else:
-            print(f"{Color.YELLOW}Generic VM detected - installing basic 3D acceleration{Color.END}")
-            self.install_generic_vm_graphics()
-    
-    def install_vmware_tools(self):
-        """Install VMware guest tools - PRESERVED FROM ORIGINAL"""
-        print(f"{Color.CYAN}Installing VMware Tools (open-vm-tools)...{Color.END}")
-        
-        # PRESERVED FROM ORIGINAL: Exact same packages
-        packages = [
-            "open-vm-tools",
-            "open-vm-tools-desktop",
-            "mesa-utils",
-            "mesa-utils-extra",
-            "libgl1-mesa-dri",
-            "libgl1-mesa-dri:i386"
-        ]
-        
-        self.run_command(
-            ["apt-get", "install", "-y"] + packages,
-            "Installing VMware guest tools and graphics"
-        )
-        
-        print(f"{Color.GREEN}✓ VMware Tools installed{Color.END}")
-        print(f"{Color.YELLOW}Note: For better 3D performance, enable 3D acceleration in VMware settings{Color.END}")
-    
-    def install_virtualbox_tools(self):
-        """Install VirtualBox guest additions - PRESERVED FROM ORIGINAL"""
-        print(f"{Color.CYAN}Installing VirtualBox Guest Additions...{Color.END}")
-        
-        # PRESERVED FROM ORIGINAL: Exact same packages
-        packages = [
-            "virtualbox-guest-utils",
-            "virtualbox-guest-x11",
-            "virtualbox-guest-dkms",
-            "mesa-utils"
-        ]
-        
-        self.run_command(
-            ["apt-get", "install", "-y"] + packages,
-            "Installing VirtualBox guest additions"
-        )
-        
-        print(f"{Color.GREEN}✓ VirtualBox Guest Additions installed{Color.END}")
-    
-    def install_kvm_tools(self):
-        """Install KVM/QEMU guest tools - PRESERVED FROM ORIGINAL"""
-        print(f"{Color.CYAN}Installing KVM/QEMU guest tools...{Color.END}")
-        
-        # PRESERVED FROM ORIGINAL: Exact same packages
-        packages = [
-            "qemu-guest-agent",
-            "spice-vdagent",
-            "xserver-xorg-video-qxl",
-            "mesa-utils"
-        ]
-        
-        self.run_command(
-            ["apt-get", "install", "-y"] + packages,
-            "Installing KVM/QEMU guest tools"
-        )
-        
-        print(f"{Color.GREEN}✓ KVM/QEMU tools installed{Color.END}")
-    
-    def install_hyperv_tools(self):
-        """Install Hyper-V guest tools - ENHANCED: New addition"""
-        print(f"{Color.CYAN}Installing Hyper-V guest tools...{Color.END}")
-        
-        packages = [
-            "hyperv-daemons",
-            "linux-tools-virtual",
-            "linux-cloud-tools-virtual"
-        ]
-        
-        self.run_command(
-            ["apt-get", "install", "-y"] + packages,
-            "Installing Hyper-V guest tools",
-            check=False  # May not be available on all distros
-        )
-    
-    def install_xen_tools(self):
-        """Install Xen guest tools - ENHANCED: New addition"""
-        print(f"{Color.CYAN}Installing Xen guest tools...{Color.END}")
-        
-        packages = [
-            "xe-guest-utilities"
-        ]
-        
-        self.run_command(
-            ["apt-get", "install", "-y"] + packages,
-            "Installing Xen guest tools",
-            check=False  # May not be available on all distros
-        )
-    
-    def install_generic_vm_graphics(self):
-        """Install generic VM graphics support - PRESERVED FROM ORIGINAL"""
-        # PRESERVED FROM ORIGINAL: Exact same packages
-        packages = [
-            "mesa-utils",
-            "mesa-utils-extra",
-            "libgl1-mesa-dri",
-            "libgl1-mesa-dri:i386",
-            "mesa-vulkan-drivers",
-            "mesa-vulkan-drivers:i386"
-        ]
-        
-        self.run_command(
-            ["apt-get", "install", "-y"] + packages,
-            "Installing generic VM graphics drivers"
-        )
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # GAMING PLATFORMS - PRESERVED FROM ORIGINAL WITH SMART PROMPTS
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def install_gaming_platforms(self):
-        """
-        Install Steam, Lutris, and other gaming platforms
-        
-        PRESERVED FROM ORIGINAL: All prompting logic with version checking
-        ENHANCED: CLI flag support
-        """
-        self.banner("GAMING PLATFORMS")
-        
-        # Install Steam - PRESERVED FROM ORIGINAL
-        should_install = self.config.install_steam or \
-                        self.prompt_install_or_update("Steam", package_name="steam-installer")
-        
-        if should_install:
-            print(f"{Color.CYAN}Installing Steam...{Color.END}")
+
+        # Filter out empty package names
+        packages = [p for p in packages if p]
+
+        available, unavailable = self._preflight_packages(packages, "essential packages")
+
+        if unavailable:
+            print(f"{Color.YELLOW}  Skipping {len(unavailable)} unavailable packages: "
+                  f"{', '.join(unavailable)}{Color.END}")
+
+        if available:
             self.run_command(
-                ["apt-get", "install", "-y", "steam-installer"],
-                "Installing Steam"
-            )
-        
-        # Install Lutris - PRESERVED FROM ORIGINAL
-        should_install = self.config.install_lutris or \
-                        self.prompt_install_or_update("Lutris", flatpak_id="net.lutris.Lutris")
-        
-        if should_install:
-            print(f"{Color.CYAN}Installing Lutris...{Color.END}")
-            print(f"{Color.YELLOW}Note: Installing via Flatpak (PPA not yet available for Ubuntu 24.04){Color.END}")
-            
-            # Ensure Flatpak is installed - PRESERVED FROM ORIGINAL
-            if not self.is_package_installed("flatpak"):
-                self.run_command(
-                    ["apt-get", "install", "-y", "flatpak"],
-                    "Installing Flatpak"
-                )
-            
-            # Add Flathub if not already added - PRESERVED FROM ORIGINAL
-            self.run_command(
-                ["flatpak", "remote-add", "--if-not-exists", "flathub", 
-                 "https://flathub.org/repo/flathub.flatpakrepo"],
-                "Adding Flathub repository",
+                ["apt-get", "install", "-y"] + available,
+                f"Installing {len(available)} essential packages",
                 check=False
             )
-            
-            # Install Lutris via Flatpak - PRESERVED FROM ORIGINAL
+        else:
+            print(f"{Color.YELLOW}⚠ No essential packages available for install{Color.END}")
+
+    def install_codecs(self):
+        """
+        Install multimedia codecs.
+
+        Same codecs and EULA pre-acceptance.
+        Eliminated shell=True. Uses subprocess
+        pipe for debconf-set-selections and list-form for apt install.
+        """
+        self.banner("MULTIMEDIA CODECS")
+
+        if self.confirm("Install multimedia codecs?"):
+            print(f"{Color.CYAN}Pre-accepting license agreements...{Color.END}")
+
+            # Pipe the EULA acceptance into debconf-set-selections safely
+            if not self.config.dry_run:
+                try:
+                    eula_value = (
+                        "ttf-mscorefonts-installer "
+                        "msttcorefonts/accepted-mscorefonts-eula select true"
+                    )
+                    result = subprocess.run(
+                        ["debconf-set-selections"],
+                        input=eula_value,
+                        capture_output=True, text=True,
+                        timeout=TIMEOUT_QUICK
+                    )
+                    if result.returncode == 0:
+                        logging.info("Pre-accepted Microsoft fonts EULA")
+                    else:
+                        logging.warning(f"debconf-set-selections returned {result.returncode}")
+                except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+                    logging.warning(f"Could not pre-accept EULA: {e}")
+            else:
+                print(f"{Color.YELLOW}[DRY RUN] Would pre-accept Microsoft fonts EULA{Color.END}")
+
+            # is already set in run_command's default env)
+            codecs_pkg = self._resolve_package_name("ubuntu-restricted-extras")
+            if codecs_pkg:
+                self.run_command(
+                    ["apt-get", "install", "-y", codecs_pkg],
+                    "Installing restricted extras (codecs)",
+                    check=False,
+                    timeout=TIMEOUT_INSTALL
+                )
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # FLATPAK SETUP — DEDUPLICATED
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def ensure_flatpak_ready(self) -> bool:
+        """
+        Ensure Flatpak is installed and Flathub remote is configured.
+
+
+        'flatpak remote-add --if-not-exists flathub' calls throughout the
+        codebase. Checks once per session and caches the result.
+
+        Returns:
+            True if Flatpak is ready for installs, False otherwise
+        """
+        # Cache check: only verify once per session
+        if hasattr(self, '_flatpak_ready'):
+            return self._flatpak_ready
+
+        self._flatpak_ready = False
+
+        # Ensure flatpak is installed
+        if not shutil.which('flatpak'):
+            print(f"{Color.CYAN}Installing Flatpak...{Color.END}")
+            success, _, _ = self.run_command(
+                ["apt-get", "install", "-y", "flatpak"],
+                "Installing Flatpak",
+                check=False
+            )
+            if not success:
+                print(f"{Color.YELLOW}⚠ Could not install Flatpak{Color.END}")
+                return False
+
+        # Ensure Flathub remote is configured
+        success, _, _ = self.run_command(
+            ["flatpak", "remote-add", "--if-not-exists", "flathub",
+             "https://dl.flathub.org/repo/flathub.flatpakrepo"],
+            "Configuring Flathub repository",
+            check=False
+        )
+
+        if success:
+            self._flatpak_ready = True
+            logging.info("Flatpak ready: Flathub configured")
+        else:
+            logging.warning("Flatpak: could not configure Flathub remote")
+
+        return self._flatpak_ready
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # GAMING PLATFORMS
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def install_gaming_platforms(self):
+        """Install Steam, Lutris, Heroic, ProtonUp-Qt - """
+        self.current_phase = InstallationPhase.PLATFORMS
+
+        # Steam - with smart prompts
+        steam_pkg = self._resolve_package_name("steam-installer")
+        if steam_pkg:
+            should_install = self.config.install_steam or \
+                            self.prompt_install_or_update("Steam", package_name=steam_pkg)
+            if should_install:
+                self.banner("STEAM INSTALLATION")
+                self.run_command(
+                    ["apt-get", "install", "-y", steam_pkg],
+                    "Installing Steam"
+                )
+
+        # Lutris via Flatpak -
+        should_install = self.config.install_lutris or \
+                        self.prompt_install_or_update("Lutris", flatpak_id="net.lutris.Lutris")
+        if should_install:
+            self.banner("LUTRIS INSTALLATION")
+            if not self.ensure_flatpak_ready():
+                return
             self.run_command(
                 ["flatpak", "install", "-y", "flathub", "net.lutris.Lutris"],
                 "Installing Lutris"
             )
-        
-        # Install GameMode - PRESERVED FROM ORIGINAL
-        should_install = self.config.install_gamemode or \
-                        self.prompt_install_or_update("GameMode", package_name="gamemode")
-        
-        if should_install:
-            # Install both 64-bit and 32-bit libraries for compatibility
-            # PRESERVED FROM ORIGINAL
-            packages = ["gamemode", "libgamemode0", "libgamemode0:i386"]
-            self.run_command(
-                ["apt-get", "install", "-y"] + packages,
-                "Installing GameMode with 32-bit and 64-bit libraries"
-            )
-        
-        # Install Heroic Games Launcher (for Epic/GOG) - PRESERVED FROM ORIGINAL
+
+        # Heroic Games Launcher -
         should_install = self.config.install_heroic or \
-                        self.prompt_install_or_update("Heroic Games Launcher", 
+                        self.prompt_install_or_update("Heroic Games Launcher",
                                                      flatpak_id="com.heroicgameslauncher.hgl")
-        
         if should_install:
-            print(f"{Color.CYAN}Installing Heroic Games Launcher...{Color.END}")
-            self.install_heroic()
-    
-    def install_heroic(self):
-        """Install Heroic Games Launcher via Flatpak - PRESERVED FROM ORIGINAL"""
-        # Install Flatpak if not present - PRESERVED FROM ORIGINAL
-        self.run_command(
-            ["apt-get", "install", "-y", "flatpak"],
-            "Installing Flatpak"
-        )
-        
-        # Add Flathub repository - PRESERVED FROM ORIGINAL
-        self.run_command(
-            ["flatpak", "remote-add", "--if-not-exists", "flathub", 
-             "https://flathub.org/repo/flathub.flatpakrepo"],
-            "Adding Flathub repository"
-        )
-        
-        # Install Heroic - PRESERVED FROM ORIGINAL
-        self.run_command(
-            ["flatpak", "install", "-y", "flathub", "com.heroicgameslauncher.hgl"],
-            "Installing Heroic Games Launcher"
-        )
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # WINE & COMPATIBILITY LAYERS - PRESERVED FROM ORIGINAL WITH ADDITIONS
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def install_wine_proton(self):
-        """
-        Install Wine and Proton compatibility layers
-        
-        PRESERVED FROM ORIGINAL: All Wine installation logic
-        ENHANCED: Added GE-Proton, ProtonUp-Qt
-        """
-        self.banner("WINE & COMPATIBILITY LAYERS")
-        
-        # Wine installation - PRESERVED FROM ORIGINAL
-        should_install = self.config.install_wine or \
-                        self.prompt_install_or_update("Wine (Windows compatibility)", 
-                                                     package_name="winehq-staging")
-        
-        if should_install:
-            print(f"{Color.CYAN}Installing Wine...{Color.END}")
-            # PRESERVED FROM ORIGINAL: Exact same command sequence
-            commands = [
-                (["mkdir", "-pm755", "/etc/apt/keyrings"], "Creating keyring directory"),
-                ("wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key", 
-                 "Downloading WineHQ key", True, True),
-                ("wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources",
-                 "Adding WineHQ repository", True, True),
-                (["apt-get", "update"], "Updating package lists"),
-                ("apt-get install -y --install-recommends winehq-staging", "Installing Wine Staging", True, True)
-            ]
-            
-            for item in commands:
-                if len(item) == 2:
-                    cmd, desc = item
-                    shell = False
-                elif len(item) == 4:
-                    cmd, desc, _, shell = item
-                else:
-                    continue
-                    
-                self.run_command(cmd, desc, shell=shell)
-        
-        # Winetricks - PRESERVED FROM ORIGINAL
-        should_install = self.config.install_winetricks or \
-                        self.prompt_install_or_update("Winetricks (Wine configuration tool)", 
-                                                     package_name="winetricks")
-        
-        if should_install:
+            self.banner("HEROIC GAMES LAUNCHER")
+            if not self.ensure_flatpak_ready():
+                return
             self.run_command(
-                ["apt-get", "install", "-y", "winetricks"],
-                "Installing Winetricks"
+                ["flatpak", "install", "-y", "flathub", "com.heroicgameslauncher.hgl"],
+                "Installing Heroic Games Launcher"
             )
-        
-        # ProtonUp-Qt for managing Proton versions - PRESERVED FROM ORIGINAL
+
+        # ProtonUp-Qt -
         should_install = self.config.install_protonup or \
-                        self.prompt_install_or_update("ProtonUp-Qt (Proton version manager)", 
+                        self.prompt_install_or_update("ProtonUp-Qt",
                                                      flatpak_id="net.davidotek.pupgui2")
-        
         if should_install:
+            self.banner("PROTONUP-QT INSTALLATION")
+            if not self.ensure_flatpak_ready():
+                return
             self.run_command(
                 ["flatpak", "install", "-y", "flathub", "net.davidotek.pupgui2"],
                 "Installing ProtonUp-Qt"
             )
-        
-        # GE-Proton automatic installation - ENHANCED: New feature
-        if self.config.install_ge_proton or self.confirm("Install GE-Proton (latest)?"):
-            self.install_ge_proton()
-    
-    def install_ge_proton(self):
-        """
-        Install GE-Proton automatically
-        
-        ENHANCED: New feature - automatic GE-Proton installation via GitHub API
-        """
-        self.banner("GE-PROTON INSTALLATION")
-        
-        try:
-            # Get latest release from GitHub API
-            print(f"{Color.CYAN}Fetching latest GE-Proton release...{Color.END}")
-            url = "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest"
-            
-            with urllib.request.urlopen(url) as response:
-                data = json.loads(response.read())
-            
-            # Find tar.gz asset
-            download_url = None
-            for asset in data.get('assets', []):
-                if asset['name'].endswith('.tar.gz') and 'sha512sum' not in asset['name']:
-                    download_url = asset['browser_download_url']
-                    filename = asset['name']
-                    break
-            
-            if not download_url:
-                print(f"{Color.RED}Could not find GE-Proton download{Color.END}")
-                return
-            
-            # Download and install
-            proton_dir = REAL_USER_HOME / ".steam/root/compatibilitytools.d"
-            proton_dir.mkdir(parents=True, exist_ok=True)
-            
-            download_path = f"/tmp/{filename}"
-            print(f"{Color.CYAN}Downloading {filename}...{Color.END}")
-            
-            if not self.config.dry_run:
-                self.run_command(
-                    f"wget -O {download_path} {download_url}",
-                    "Downloading GE-Proton",
-                    shell=True,
-                    timeout=600  # 10 minute timeout for large download
-                )
-                
-                print(f"{Color.CYAN}Extracting to {proton_dir}...{Color.END}")
-                self.run_command(
-                    f"tar -xzf {download_path} -C {proton_dir}",
-                    "Extracting GE-Proton",
-                    shell=True
-                )
-                
-                # Set ownership
-                uid, gid = get_real_user_uid_gid()
-                for root, dirs, files in os.walk(proton_dir):
-                    for d in dirs:
-                        os.chown(os.path.join(root, d), uid, gid)
-                    for f in files:
-                        os.chown(os.path.join(root, f), uid, gid)
-                
-                print(f"{Color.GREEN}✓ GE-Proton installed to {proton_dir}{Color.END}")
-                os.remove(download_path)
-            
-        except Exception as e:
-            logging.error(f"GE-Proton installation failed: {e}")
-            print(f"{Color.RED}✗ GE-Proton installation failed: {e}{Color.END}")
-            print(f"{Color.CYAN}You can install manually from: https://github.com/GloriousEggroll/proton-ge-custom{Color.END}")
-
-# END OF PART 4
-# Continue with Part 5 for additional tools, optimizations, and installation summary
-# PART 5: Essential Packages, Tools, Optimizations, and Installation Summary
-# ALL original functionality preserved, especially the comprehensive installation summary
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # ESSENTIAL PACKAGES - PRESERVED FROM ORIGINAL
+    # WINE & PROTON — DYNAMIC CODENAME
     # ═══════════════════════════════════════════════════════════════════════════
-    
-    def install_essential_packages(self):
+
+    def install_wine_proton(self):
         """
-        Install essential gaming packages and libraries
-        
-        PRESERVED FROM ORIGINAL: Exact same package list
+        Install Wine, Winetricks, and related compatibility layers.
+
+        Dynamic WineHQ codename resolution.
+        Handles Wine, Winetricks, DXVK, VKD3D, and GE-Proton installation.
         """
-        self.banner("ESSENTIAL PACKAGES")
-        
-        # PRESERVED FROM ORIGINAL: Exact same packages
-        # FIXED: linux-cpupower → linux-tools-generic for Ubuntu 24.04 compatibility
-        packages = [
-            # Core libraries
-            "build-essential",
-            "git",
-            "curl",
-            "wget",
-            
-            # Graphics libraries
-            "libgl1-mesa-dri:i386",
-            "mesa-vulkan-drivers",
-            "mesa-vulkan-drivers:i386",
-            
-            # Audio
-            "pulseaudio",
-            "pavucontrol",
-            
-            # Controllers
-            "joystick",
-            "jstest-gtk",
-            
-            # Fonts
-            "fonts-liberation",
-            "fonts-wine",
-            
-            # Performance tools
-            "linux-tools-generic",  # FIXED: was linux-cpupower
-            
-            # Additional tools
-            "xboxdrv",
-            "antimicrox"
-        ]
-        
-        # Install packages with error handling for optional ones
-        success, stdout, stderr = self.run_command(
-            ["apt-get", "install", "-y"] + packages,
-            "Installing essential packages",
-            check=False
-        )
-        
-        # If installation failed, try without optional packages
-        if not success and "has no installation candidate" in stderr:
-            print(f"{Color.YELLOW}Some optional packages unavailable, installing core packages...{Color.END}")
-            core_packages = [p for p in packages if p not in ["antimicrox", "xboxdrv"]]
+        self.current_phase = InstallationPhase.COMPATIBILITY
+
+        # Wine - with dynamic codename
+        should_install = self.config.install_wine or \
+                        self.prompt_install_or_update("Wine Staging", package_name="winehq-staging")
+        if should_install:
+            self._install_wine_dynamic()
+
+        # Winetricks -
+        should_install = self.config.install_winetricks or \
+                        self.prompt_install_or_update("Winetricks", package_name="winetricks")
+        if should_install:
+            self.banner("WINETRICKS INSTALLATION")
             self.run_command(
-                ["apt-get", "install", "-y"] + core_packages,
-                "Installing core essential packages",
+                ["apt-get", "install", "-y", "winetricks"],
+                "Installing Winetricks"
+            )
+
+        # GE-Proton -
+        if self.config.install_ge_proton or self.confirm("Install GE-Proton (enhanced Proton)?"):
+            self._install_ge_proton()
+
+    def _install_wine_dynamic(self):
+        """
+        Install Wine with dynamically resolved repository codename.
+
+
+        """
+        self.banner("WINE INSTALLATION")
+
+        wine_codename = self.get_wine_codename()
+        if not wine_codename:
+            print(f"{Color.RED}✗ Could not determine WineHQ repository codename{Color.END}")
+            print(f"{Color.CYAN}  Falling back to system packages: apt-get install wine wine64{Color.END}")
+            self.run_command(
+                ["apt-get", "install", "-y", "wine", "wine64"],
+                "Installing Wine from distribution repositories",
                 check=False
             )
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # MULTIMEDIA CODECS - PRESERVED FROM ORIGINAL
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def install_codecs(self):
-        """
-        Install multimedia codecs
-        
-        PRESERVED FROM ORIGINAL: Exact same EULA handling and installation
-        """
-        self.banner("MULTIMEDIA CODECS")
-        
-        if self.confirm("Install multimedia codecs?"):
-            print(f"{Color.CYAN}Pre-accepting license agreements...{Color.END}")
-            
-            # Pre-accept EULA for ttf-mscorefonts-installer - PRESERVED FROM ORIGINAL
-            eula_commands = [
-                "echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | debconf-set-selections",
-            ]
-            
-            for cmd in eula_commands:
-                self.run_command(cmd, "Pre-accepting Microsoft fonts EULA", shell=True, check=False)
-            
-            # Install with non-interactive frontend - PRESERVED FROM ORIGINAL
-            env_cmd = "DEBIAN_FRONTEND=noninteractive apt-get install -y ubuntu-restricted-extras"
+            return
+
+        repo_base = self.get_wine_repo_base_url()
+
+        print(f"{Color.CYAN}  Detected codename: {wine_codename}{Color.END}")
+        print(f"{Color.CYAN}  Repository: {repo_base}{Color.END}")
+        logging.info(f"Wine install: codename='{wine_codename}', repo='{repo_base}'")
+
+        sources_url = f"{repo_base}/dists/{wine_codename}/winehq-{wine_codename}.sources"
+
+        # Verify repo URL is accessible
+        print(f"{Color.CYAN}  Verifying WineHQ repository availability...{Color.END}")
+        repo_accessible = False
+        try:
+            req = urllib.request.Request(sources_url, method='HEAD')
+            with urllib.request.urlopen(req, timeout=TIMEOUT_NETWORK) as response:
+                repo_accessible = response.status == 200
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            logging.warning(f"Wine repo check failed for '{sources_url}': {e}")
+
+        if not repo_accessible:
+            print(f"{Color.YELLOW}⚠ WineHQ repository not available for '{wine_codename}'{Color.END}")
+            print(f"{Color.CYAN}  Falling back to distribution packages...{Color.END}")
             self.run_command(
-                env_cmd,
-                "Installing Ubuntu restricted extras (codecs)",
-                shell=True
+                ["apt-get", "install", "-y", "wine", "wine64"],
+                "Installing Wine from distribution repositories",
+                check=False
             )
-    
+            return
+
+        commands = [
+            (["mkdir", "-pm755", "/etc/apt/keyrings"],
+             "Creating keyring directory"),
+            (["wget", "-O", "/etc/apt/keyrings/winehq-archive.key",
+              "https://dl.winehq.org/wine-builds/winehq.key"],
+             "Downloading WineHQ signing key"),
+            (["wget", "-NP", "/etc/apt/sources.list.d/", sources_url],
+             f"Adding WineHQ repository ({wine_codename})"),
+            (["apt-get", "update"],
+             "Updating package lists"),
+            (["apt-get", "install", "-y", "--install-recommends", "winehq-staging"],
+             "Installing Wine Staging"),
+        ]
+
+        for cmd, desc in commands:
+            success, _, _ = self.run_command(cmd, desc, check=False)
+            if not success and 'install' in desc.lower() and 'wine' in desc.lower():
+                print(f"{Color.YELLOW}⚠ Wine Staging not available, trying Stable...{Color.END}")
+                self.run_command(
+                    ["apt-get", "install", "-y", "--install-recommends", "winehq-stable"],
+                    "Installing Wine Stable (fallback)",
+                    check=False
+                )
+
+        sources_filename = sources_url.rsplit('/', 1)[-1] if '/' in sources_url else ""
+        repo_files = ["/etc/apt/keyrings/winehq-archive.key"]
+        if sources_filename:
+            repo_files.append(f"/etc/apt/sources.list.d/{sources_filename}")
+        self._record_repo_add(
+            f"WineHQ ({wine_codename})", repo_files,
+            f"WineHQ repository added for {wine_codename}"
+        )
+
+    def _install_ge_proton(self):
+        """
+        Install GE-Proton from GitHub with SHA512 checksum verification.
+
+        Downloads and verifies sha512sum.
+        Records rollback action.
+        Downloads latest release, verifies SHA512 checksum, and extracts.
+        """
+        self.banner("GE-PROTON INSTALLATION")
+
+        print(f"{Color.CYAN}Fetching latest GE-Proton release...{Color.END}")
+
+        try:
+            api_url = "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest"
+            req = urllib.request.Request(api_url)
+            req.add_header('User-Agent', 'debian-gaming-setup')
+
+            with urllib.request.urlopen(req, timeout=TIMEOUT_API) as response:
+                data = json.loads(response.read())
+
+            tag_name = data.get('tag_name', '')
+            print(f"{Color.CYAN}Latest GE-Proton: {tag_name}{Color.END}")
+
+            # Find tar.gz and sha512sum assets
+            download_url = None
+            checksum_url = None
+            tarball_name = None
+
+            for asset in data.get('assets', []):
+                name = asset.get('name', '')
+                url = asset.get('browser_download_url', '')
+                if name.endswith('.tar.gz') and 'GE-Proton' in name:
+                    download_url = url
+                    tarball_name = name
+                elif name.endswith('.sha512sum') and 'GE-Proton' in name:
+                    checksum_url = url
+
+            if not download_url:
+                print(f"{Color.YELLOW}⚠ Could not find GE-Proton download{Color.END}")
+                return
+
+            # Download and extract
+            compat_dir = REAL_USER_HOME / ".steam" / "root" / "compatibilitytools.d"
+            compat_dir.mkdir(parents=True, exist_ok=True)
+
+            download_path = f"/tmp/{tag_name}.tar.gz"
+
+            self.run_command(
+                ["wget", "-O", download_path, download_url],
+                f"Downloading {tag_name}"
+            )
+
+            if checksum_url:
+                print(f"{Color.CYAN}  Verifying SHA512 checksum...{Color.END}")
+                checksum_verified = self._verify_ge_proton_checksum(
+                    download_path, checksum_url, tarball_name
+                )
+                if not checksum_verified:
+                    print(f"{Color.RED}✗ Checksum verification FAILED!{Color.END}")
+                    print(f"{Color.YELLOW}  The download may be corrupt or tampered.{Color.END}")
+                    if not self.confirm("Install anyway? (NOT recommended)"):
+                        if os.path.exists(download_path):
+                            os.remove(download_path)
+                        return
+                else:
+                    print(f"{Color.GREEN}  ✓ Checksum verified{Color.END}")
+            else:
+                print(f"{Color.YELLOW}  ⚠ No checksum file found, skipping verification{Color.END}")
+                logging.warning(f"GE-Proton: No .sha512sum asset for {tag_name}")
+
+            self.run_command(
+                ["tar", "-xzf", download_path, "-C", str(compat_dir)],
+                f"Extracting {tag_name}"
+            )
+
+            # Set proper ownership -
+            uid, gid = get_real_user_uid_gid()
+            if not self.config.dry_run:
+                for root, dirs, files in os.walk(str(compat_dir)):
+                    os.chown(root, uid, gid)
+                    for d in dirs:
+                        os.chown(os.path.join(root, d), uid, gid)
+                    for f_item in files:
+                        os.chown(os.path.join(root, f_item), uid, gid)
+
+            # Determine the extracted directory name (typically matches tag)
+            extracted_dir = str(compat_dir / tag_name)
+            self.record_action(
+                action_type=ActionType.GE_PROTON_INSTALL,
+                description=f"GE-Proton {tag_name} installed",
+                files=[extracted_dir],
+                reversal_commands=[["rm", "-rf", extracted_dir]],
+                metadata={"tag_name": tag_name, "download_url": download_url},
+            )
+
+            # Cleanup download
+            if os.path.exists(download_path):
+                os.remove(download_path)
+
+            print(f"{Color.GREEN}✓ {tag_name} installed to {compat_dir}{Color.END}")
+
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            logging.error(f"GE-Proton installation failed: {e}")
+            print(f"{Color.YELLOW}⚠ GE-Proton installation failed: {e}{Color.END}")
+            print(f"{Color.CYAN}  Manual: https://github.com/GloriousEggroll/proton-ge-custom{Color.END}")
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logging.error(f"GE-Proton installation failed (unexpected): {e}")
+            print(f"{Color.YELLOW}⚠ GE-Proton installation failed: {e}{Color.END}")
+            print(f"{Color.CYAN}  Manual: https://github.com/GloriousEggroll/proton-ge-custom{Color.END}")
+
+    def _verify_ge_proton_checksum(self, local_file: str, checksum_url: str,
+                                    expected_filename: str) -> bool:
+        """
+        Verify GE-Proton download against the SHA512 checksum from GitHub.
+
+
+        release assets, extracts the expected hash, and compares it against
+        the locally computed hash of the downloaded tarball.
+
+        Args:
+            local_file: Path to the downloaded tar.gz file
+            checksum_url: URL of the .sha512sum asset
+            expected_filename: The tarball filename to match in checksum file
+
+        Returns:
+            True if checksum matches, False otherwise
+        """
+        try:
+            # Download the checksum file
+            req = urllib.request.Request(checksum_url)
+            req.add_header('User-Agent', 'debian-gaming-setup')
+
+            with urllib.request.urlopen(req, timeout=TIMEOUT_API) as response:
+                checksum_content = response.read().decode('utf-8').strip()
+
+            # Parse checksum file (format: "hash  filename" or "hash *filename")
+            expected_hash = None
+            for line in checksum_content.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split(None, 1)
+                if len(parts) == 2:
+                    file_hash, file_name = parts
+                    # Strip leading * from binary mode indicator
+                    file_name = file_name.lstrip('*').strip()
+                    if expected_filename in file_name or file_name in expected_filename:
+                        expected_hash = file_hash.lower()
+                        break
+
+            if not expected_hash:
+                # Try using the first line if only one hash is present
+                first_parts = checksum_content.split(None, 1)
+                if first_parts and len(first_parts[0]) == 128:  # SHA512 is 128 hex chars
+                    expected_hash = first_parts[0].lower()
+                else:
+                    logging.warning(f"GE-Proton checksum: could not parse hash from file")
+                    return False
+
+            # Compute local SHA512
+            sha512 = hashlib.sha512()
+            with open(local_file, 'rb') as f:
+                for chunk in iter(lambda: f.read(8192), b''):
+                    sha512.update(chunk)
+            local_hash = sha512.hexdigest().lower()
+
+            if local_hash == expected_hash:
+                logging.info(f"GE-Proton checksum verified: {local_hash[:16]}...")
+                return True
+            else:
+                logging.error(
+                    f"GE-Proton checksum MISMATCH: "
+                    f"expected={expected_hash[:16]}... "
+                    f"actual={local_hash[:16]}..."
+                )
+                return False
+
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            logging.warning(f"GE-Proton checksum verification failed: {e}")
+            return False
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # ADDITIONAL TOOLS - NEW ADDITIONS AND PRESERVED ORIGINAL
+    # SOBER, WAYDROID, COMMUNICATION TOOLS
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
+    def install_sober(self):
+        """Install Sober (Roblox on Linux) - """
+        should_install = self.config.install_sober or \
+                        self.prompt_install_or_update("Sober (Roblox on Linux)",
+                                                     flatpak_id="org.vinegarhq.Sober")
+        if should_install:
+            self.banner("SOBER INSTALLATION")
+            if not self.ensure_flatpak_ready():
+                return
+            success, _, _ = self.run_command(
+                ["flatpak", "install", "-y", "flathub", "org.vinegarhq.Sober"],
+                "Installing Sober", check=False
+            )
+            if success:
+                print(f"{Color.GREEN}✓ Sober installed{Color.END}")
+                print(f"{Color.CYAN}  Launch: flatpak run org.vinegarhq.Sober{Color.END}")
+            else:
+                print(f"{Color.YELLOW}⚠ Installation failed. See: https://sober.vinegarhq.org/{Color.END}")
+
+    def install_waydroid(self):
+        """
+        Install Waydroid with dynamically resolved codename.
+
+        Dynamic codename resolution.
+        Includes Wayland session check and post-install configuration guidance.
+        """
+        should_install = self.config.install_waydroid or \
+                        self.prompt_install_or_update("Waydroid (Android container)",
+                                                     package_name="waydroid")
+        if not should_install:
+            return
+
+        self.banner("WAYDROID INSTALLATION")
+
+        print(f"{Color.YELLOW}⚠ Waydroid requires Wayland session and specific kernel modules{Color.END}")
+
+        if not self.confirm("Continue with Waydroid installation?"):
+            return
+
+        wayland_session = os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland'
+        if not wayland_session:
+            print(f"{Color.YELLOW}⚠ Waydroid works best on Wayland sessions{Color.END}")
+            print(f"{Color.CYAN}  Current session: {os.environ.get('XDG_SESSION_TYPE', 'unknown')}{Color.END}")
+            if not self.confirm("Install anyway?"):
+                return
+
+        # Dynamic codename resolution for Waydroid compatibility
+        codename = self.get_waydroid_codename()
+        if codename:
+            print(f"{Color.CYAN}  System codename: {codename}{Color.END}")
+        logging.info(f"Waydroid install: resolved codename = '{codename}'")
+
+        # Download the Waydroid repo setup script first, then execute it
+        waydroid_script = "/tmp/waydroid_repo_setup.sh"
+
+        # Step 1: Download the script
+        success, _, _ = self.run_command(
+            ["wget", "-O", waydroid_script, "https://repo.waydro.id"],
+            "Downloading Waydroid repository setup script",
+            check=False,
+            timeout=TIMEOUT_DOWNLOAD
+        )
+
+        if not success:
+            print(f"{Color.YELLOW}⚠ Could not download Waydroid setup script{Color.END}")
+            print(f"{Color.CYAN}  See: https://docs.waydro.id/usage/install-on-desktops{Color.END}")
+            return
+
+        # Step 2: Basic validation — ensure it's a shell script, not binary/HTML
+        try:
+            with open(waydroid_script, 'r') as f:
+                first_line = f.readline().strip()
+                script_content = f.read()
+
+            if not first_line.startswith('#!') or 'html' in first_line.lower():
+                print(f"{Color.RED}✗ Downloaded file is not a valid shell script{Color.END}")
+                logging.error(f"Waydroid script validation failed: first line = '{first_line}'")
+                os.remove(waydroid_script)
+                return
+
+            logging.info(f"Waydroid script validated: {len(script_content)} bytes, shebang: {first_line}")
+        except (IOError, UnicodeDecodeError) as e:
+            print(f"{Color.YELLOW}⚠ Could not validate downloaded script: {e}{Color.END}")
+            if os.path.exists(waydroid_script):
+                os.remove(waydroid_script)
+            return
+
+        # Step 3: Execute the downloaded script
+        os.chmod(waydroid_script, 0o755)
+        success, _, _ = self.run_command(
+            ["bash", waydroid_script],
+            "Adding Waydroid repository",
+            check=False
+        )
+
+        # Cleanup the temp script
+        if os.path.exists(waydroid_script):
+            os.remove(waydroid_script)
+
+        if not success:
+            print(f"{Color.YELLOW}⚠ Waydroid repository setup failed{Color.END}")
+            print(f"{Color.CYAN}  See: https://docs.waydro.id/usage/install-on-desktops{Color.END}")
+            return
+
+        # Step 4: Install Waydroid
+        self.run_command(["apt-get", "update"], "Updating package lists", check=False)
+
+        success, _, _ = self.run_command(
+            ["apt-get", "install", "-y", "waydroid"],
+            "Installing Waydroid",
+            check=False
+        )
+
+        if not success:
+            print(f"{Color.YELLOW}⚠ Waydroid installation failed{Color.END}")
+            print(f"{Color.CYAN}  See: https://docs.waydro.id/usage/install-on-desktops{Color.END}")
+            return
+
+        print(f"{Color.GREEN}✓ Waydroid installed{Color.END}")
+        print(f"{Color.YELLOW}Next steps:{Color.END}")
+        print(f"  1. sudo waydroid init")
+        print(f"  2. waydroid session start")
+        print(f"  3. waydroid show-full-ui")
+
+    def install_discord(self):
+        """Install Discord - """
+        should_install = self.config.install_discord or \
+                        self.prompt_install_or_update("Discord", flatpak_id="com.discordapp.Discord")
+        if should_install:
+            self.banner("DISCORD INSTALLATION")
+            if not self.ensure_flatpak_ready():
+                return
+            self.run_command(
+                ["flatpak", "install", "-y", "flathub", "com.discordapp.Discord"],
+                "Installing Discord"
+            )
+
+    def install_obs(self):
+        """Install OBS Studio - """
+        should_install = self.config.install_obs or \
+                        self.prompt_install_or_update("OBS Studio", package_name="obs-studio")
+        if should_install:
+            self.banner("OBS STUDIO INSTALLATION")
+            commands = [
+                (["add-apt-repository", "ppa:obsproject/obs-studio", "-y"], "Adding OBS PPA"),
+                (["apt-get", "update"], "Updating package lists"),
+                (["apt-get", "install", "-y", "obs-studio"], "Installing OBS Studio")
+            ]
+            for cmd, desc in commands:
+                self.run_command(cmd, desc)
+
+    def install_mumble(self):
+        """Install Mumble voice chat"""
+        if not (self.config.install_mumble or self.confirm("Install Mumble (voice chat)?")):
+            return
+        self.run_command(["apt-get", "install", "-y", "mumble"], "Installing Mumble")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PERFORMANCE TOOLS AND UTILITIES
+    # ═══════════════════════════════════════════════════════════════════════════
+
     def install_mangohud(self):
-        """
-        Install MangoHud performance overlay
-        
-        ENHANCED: New feature - performance monitoring overlay
-        FIXED: Better handling for Ubuntu 24.04, avoid broken PPAs
-        """
+        """Install MangoHud performance overlay with version-aware logic."""
         if not (self.config.install_mangohud or self.confirm("Install MangoHud (performance overlay)?")):
             return
-        
+
         self.banner("MANGOHUD INSTALLATION")
-        
-        # Try to install from repos first (works on Ubuntu 24.04+)
-        print(f"{Color.CYAN}Attempting to install MangoHud from default repositories...{Color.END}")
+
         packages = ["mangohud", "mangohud:i386"]
         success, stdout, stderr = self.run_command(
             ["apt-get", "install", "-y"] + packages,
             "Installing MangoHud from default repos",
             check=False
         )
-        
+
         if success:
-            print(f"{Color.GREEN}✓ MangoHud installed successfully{Color.END}")
-            # Try to install goverlay separately (optional)
+            print(f"{Color.GREEN}✓ MangoHud installed{Color.END}")
             self.run_command(
                 ["apt-get", "install", "-y", "goverlay"],
-                "Installing Goverlay (optional)",
-                check=False
+                "Installing Goverlay (optional)", check=False
             )
             return
-        
-        # If not in default repos, check Ubuntu version before trying PPA
+
         print(f"{Color.YELLOW}MangoHud not in default repos{Color.END}")
-        
-        # Check if running Ubuntu < 24.04 (where PPA might work)
+
+        # Check Ubuntu version before trying PPA
         try:
             version_check = self.system_info.distro_version
             major_version = float(version_check.split('.')[0] + '.' + version_check.split('.')[1])
-            
+
             if major_version >= 24.04:
                 print(f"{Color.YELLOW}⚠ MangoHud PPA not available for Ubuntu 24.04+{Color.END}")
-                print(f"{Color.CYAN}  MangoHud should be available in repos - updating package lists...{Color.END}")
                 self.run_command(["apt-get", "update"], "Refreshing package lists")
-                # Try one more time after update
                 success, _, _ = self.run_command(
                     ["apt-get", "install", "-y"] + packages,
-                    "Installing MangoHud after update",
-                    check=False
+                    "Installing MangoHud after update", check=False
                 )
                 if not success:
-                    print(f"{Color.YELLOW}⚠ MangoHud installation failed{Color.END}")
-                    print(f"{Color.CYAN}  Manual installation: https://github.com/flightlessmango/MangoHud{Color.END}")
+                    print(f"{Color.CYAN}  Manual: https://github.com/flightlessmango/MangoHud{Color.END}")
                 return
-        except:
-            pass  # Couldn't determine version, try PPA anyway
-        
+        except (ValueError, IndexError):
+            pass
+
         # For Ubuntu < 24.04, try PPA
-        print(f"{Color.YELLOW}Attempting PPA installation (Ubuntu < 24.04)...{Color.END}")
         ppa_success, _, _ = self.run_command(
             ["add-apt-repository", "ppa:flexiondotorg/mangohud", "-y"],
-            "Adding MangoHud PPA",
-            check=False
+            "Adding MangoHud PPA", check=False
         )
-        
+
         if ppa_success:
             self.run_command(["apt-get", "update"], "Updating package lists", check=False)
             self.run_command(
                 ["apt-get", "install", "-y"] + packages,
-                "Installing MangoHud from PPA",
-                check=False
+                "Installing MangoHud from PPA", check=False
             )
         else:
-            print(f"{Color.YELLOW}⚠ PPA installation failed{Color.END}")
-            print(f"{Color.CYAN}  Manual installation: https://github.com/flightlessmango/MangoHud{Color.END}")
-    
+            print(f"{Color.CYAN}  Manual: https://github.com/flightlessmango/MangoHud{Color.END}")
+
     def install_goverlay(self):
-        """
-        Install Goverlay (MangoHud GUI)
-        
-        ENHANCED: New feature - GUI for MangoHud configuration
-        """
+        """Install Goverlay (MangoHud GUI)"""
         if not (self.config.install_goverlay or self.confirm("Install Goverlay (MangoHud GUI)?")):
             return
-        
-        self.run_command(
-            ["apt-get", "install", "-y", "goverlay"],
-            "Installing Goverlay",
-            check=False
-        )
-    
-    def install_discord(self):
-        """
-        Install Discord
-        
-        PRESERVED FROM ORIGINAL: Flatpak installation
-        """
-        should_install = self.config.install_discord or \
-                        self.prompt_install_or_update("Discord", flatpak_id="com.discordapp.Discord")
-        
-        if should_install:
-            self.banner("DISCORD INSTALLATION")
-            
-            print(f"{Color.CYAN}Installing Discord via Flatpak...{Color.END}")
-            self.run_command(
-                ["flatpak", "install", "-y", "flathub", "com.discordapp.Discord"],
-                "Installing Discord"
-            )
-    
-    def install_obs(self):
-        """
-        Install OBS Studio for streaming/recording
-        
-        PRESERVED FROM ORIGINAL: PPA installation with exact same commands
-        """
-        should_install = self.config.install_obs or \
-                        self.prompt_install_or_update("OBS Studio (for streaming/recording)", 
-                                                     package_name="obs-studio")
-        
-        if should_install:
-            self.banner("OBS STUDIO INSTALLATION")
-            
-            # PRESERVED FROM ORIGINAL: Exact same commands
-            commands = [
-                (["add-apt-repository", "ppa:obsproject/obs-studio", "-y"], "Adding OBS PPA"),
-                (["apt-get", "update"], "Updating package lists"),
-                (["apt-get", "install", "-y", "obs-studio"], "Installing OBS Studio")
-            ]
-            
-            for cmd, desc in commands:
-                self.run_command(cmd, desc)
-    
-    def install_mumble(self):
-        """
-        Install Mumble voice chat
-        
-        ENHANCED: New addition - voice communication tool
-        """
-        if not (self.config.install_mumble or self.confirm("Install Mumble (voice chat)?")):
-            return
-        
-        self.run_command(
-            ["apt-get", "install", "-y", "mumble"],
-            "Installing Mumble"
-        )
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # NEW PLATFORMS - SOBER & WAYDROID
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def install_sober(self):
-        """
-        Install Sober (Roblox on Linux)
-        
-        NEW FEATURE: Roblox gaming platform for Linux
-        """
-        should_install = self.config.install_sober or \
-                        self.prompt_install_or_update("Sober (Roblox on Linux)", 
-                                                     flatpak_id="org.vinegarhq.Sober")
-        
-        if should_install:
-            self.banner("SOBER INSTALLATION")
-            
-            print(f"{Color.CYAN}Installing Sober (Roblox on Linux) via Flatpak...{Color.END}")
-            
-            # Ensure Flatpak is installed
-            if not self.is_package_installed("flatpak"):
-                self.run_command(
-                    ["apt-get", "install", "-y", "flatpak"],
-                    "Installing Flatpak"
-                )
-            
-            # Add Flathub if not already added
-            self.run_command(
-                ["flatpak", "remote-add", "--if-not-exists", "flathub", 
-                 "https://flathub.org/repo/flathub.flatpakrepo"],
-                "Adding Flathub repository",
-                check=False
-            )
-            
-            # Install Sober
-            success, _, _ = self.run_command(
-                ["flatpak", "install", "-y", "flathub", "org.vinegarhq.Sober"],
-                "Installing Sober",
-                check=False
-            )
-            
-            if success:
-                print(f"{Color.GREEN}✓ Sober installed successfully{Color.END}")
-                print(f"{Color.CYAN}  Launch with: flatpak run org.vinegarhq.Sober{Color.END}")
-            else:
-                print(f"{Color.YELLOW}⚠ Sober installation failed{Color.END}")
-                print(f"{Color.CYAN}  Manual installation: https://sober.vinegarhq.org/{Color.END}")
-    
-    def install_waydroid(self):
-        """
-        Install Waydroid (Android container for Linux)
-        
-        NEW FEATURE: Run Android apps on Linux
-        """
-        should_install = self.config.install_waydroid or \
-                        self.confirm("Install Waydroid (Android container)?")
-        
-        if not should_install:
-            return
-        
-        self.banner("WAYDROID INSTALLATION")
-        
-        print(f"{Color.YELLOW}⚠ Waydroid requires Wayland session and specific kernel modules{Color.END}")
-        print(f"{Color.CYAN}  This installation will set up the repository and install Waydroid{Color.END}")
-        
-        if not self.confirm("Continue with Waydroid installation?"):
-            return
-        
-        # Check if running Wayland
-        wayland_session = os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland'
-        if not wayland_session:
-            print(f"{Color.YELLOW}⚠ Waydroid works best on Wayland sessions{Color.END}")
-            print(f"{Color.CYAN}  You're currently on X11. Waydroid may have limited functionality.{Color.END}")
-            if not self.confirm("Install anyway?"):
-                return
-        
-        # Add Waydroid repository
-        print(f"{Color.CYAN}Adding Waydroid repository...{Color.END}")
-        
-        # Get Ubuntu codename
-        try:
-            with open('/etc/os-release', 'r') as f:
-                for line in f:
-                    if line.startswith('VERSION_CODENAME='):
-                        codename = line.split('=')[1].strip().strip('"')
-                        break
-                else:
-                    codename = "noble"  # Default to Ubuntu 24.04
-        except:
-            codename = "noble"
-        
-        commands = [
-            (f"curl https://repo.waydro.id | sh", 
-             "Adding Waydroid repository", True, True),
-            (["apt-get", "update"], "Updating package lists"),
-            (["apt-get", "install", "-y", "waydroid"], "Installing Waydroid"),
-        ]
-        
-        for item in commands:
-            if len(item) == 2:
-                cmd, desc = item
-                shell = False
-            elif len(item) == 4:
-                cmd, desc, _, shell = item
-            else:
-                continue
-            
-            success, _, _ = self.run_command(cmd, desc, shell=shell, check=False)
-            if not success and "waydroid" in str(cmd):
-                print(f"{Color.YELLOW}⚠ Waydroid installation failed{Color.END}")
-                print(f"{Color.CYAN}  Manual installation: https://docs.waydro.id/usage/install-on-desktops{Color.END}")
-                return
-        
-        print(f"{Color.GREEN}✓ Waydroid installed{Color.END}")
-        print(f"{Color.YELLOW}Next steps:{Color.END}")
-        print(f"  1. Initialize Waydroid: sudo waydroid init")
-        print(f"  2. Start Waydroid session: waydroid session start")
-        print(f"  3. Launch Waydroid UI: waydroid show-full-ui")
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # NEW UTILITIES - GWE, vkBasalt, ReShade, Mod Managers
-    # ═══════════════════════════════════════════════════════════════════════════
-    
+        self.run_command(["apt-get", "install", "-y", "goverlay"], "Installing Goverlay", check=False)
+
     def install_greenwithenv(self):
-        """
-        Install GreenWithEnvy (NVIDIA GPU control tool)
-        
-        NEW FEATURE: GUI for NVIDIA GPU monitoring and overclocking
-        """
+        """Install GreenWithEnvy (NVIDIA GPU control) - """
         should_install = self.config.install_greenwithenv or \
-                        self.prompt_install_or_update("GreenWithEnvy (NVIDIA GPU control)", 
+                        self.prompt_install_or_update("GreenWithEnvy (NVIDIA GPU control)",
                                                      flatpak_id="com.leinardi.gwe")
-        
         if not should_install:
             return
-        
-        # Check if NVIDIA GPU
+
         if self.hardware_info.gpu_vendor != GPUVendor.NVIDIA:
             print(f"{Color.YELLOW}⚠ GreenWithEnvy is designed for NVIDIA GPUs{Color.END}")
-            print(f"{Color.CYAN}  Detected GPU: {self.hardware_info.gpu_vendor.value}{Color.END}")
             if not self.confirm("Install anyway?"):
                 return
-        
+
         self.banner("GREENWITHENV INSTALLATION")
-        
-        print(f"{Color.CYAN}Installing GreenWithEnvy via Flatpak...{Color.END}")
-        
-        # Ensure Flatpak is installed
-        if not self.is_package_installed("flatpak"):
-            self.run_command(
-                ["apt-get", "install", "-y", "flatpak"],
-                "Installing Flatpak"
-            )
-        
-        # Add Flathub
-        self.run_command(
-            ["flatpak", "remote-add", "--if-not-exists", "flathub", 
-             "https://flathub.org/repo/flathub.flatpakrepo"],
-            "Adding Flathub repository",
-            check=False
-        )
-        
-        # Install GWE
+
+        if not self.ensure_flatpak_ready():
+            return
+
         success, _, _ = self.run_command(
             ["flatpak", "install", "-y", "flathub", "com.leinardi.gwe"],
-            "Installing GreenWithEnvy",
-            check=False
+            "Installing GreenWithEnvy", check=False
         )
-        
+
         if success:
             print(f"{Color.GREEN}✓ GreenWithEnvy installed{Color.END}")
-            print(f"{Color.CYAN}  Launch with: flatpak run com.leinardi.gwe{Color.END}")
-            print(f"{Color.YELLOW}  Note: Some features require running with sudo{Color.END}")
+            print(f"{Color.CYAN}  Launch: flatpak run com.leinardi.gwe{Color.END}")
         else:
-            print(f"{Color.YELLOW}⚠ Installation failed{Color.END}")
-            print(f"{Color.CYAN}  Manual installation: https://gitlab.com/leinardi/gwe{Color.END}")
-    
+            print(f"{Color.CYAN}  Manual: https://gitlab.com/leinardi/gwe{Color.END}")
+
     def install_vkbasalt(self):
-        """
-        Install vkBasalt (Vulkan post-processing layer)
-        
-        NEW FEATURE: ReShade-like effects for Vulkan games on Linux
-        """
+        """Install vkBasalt (Vulkan post-processing) - """
         should_install = self.config.install_vkbasalt or \
                         self.confirm("Install vkBasalt (Vulkan post-processing)?")
-        
         if not should_install:
             return
-        
-        self.banner("VKBASALT INSTALLATION")
-        
-        print(f"{Color.CYAN}Installing vkBasalt...{Color.END}")
-        
-        # Try to install from repos first (available on Ubuntu 22.04+)
-        packages = ["vkbasalt"]
-        success, stdout, stderr = self.run_command(
-            ["apt-get", "install", "-y"] + packages,
-            "Installing vkBasalt from default repos",
-            check=False
-        )
-        
-        if success:
-            print(f"{Color.GREEN}✓ vkBasalt installed successfully{Color.END}")
-        else:
-            # Try with lib32 variant
-            print(f"{Color.YELLOW}Trying alternative package name...{Color.END}")
-            packages = ["vkbasalt", "lib32-vkbasalt"]
-            success, _, _ = self.run_command(
-                ["apt-get", "install", "-y"] + packages,
-                "Installing vkBasalt with 32-bit support",
-                check=False
-            )
-            
-            if not success:
-                print(f"{Color.YELLOW}⚠ vkBasalt not available in repos{Color.END}")
-                print(f"{Color.CYAN}  Manual installation from source:{Color.END}")
-                print(f"{Color.CYAN}  https://github.com/DadSchoorse/vkBasalt{Color.END}")
-                return
-        
-        # Create default config
-        config_dir = REAL_USER_HOME / ".config/vkBasalt"
-        config_file = config_dir / "vkBasalt.conf"
-        
-        if not config_file.exists():
-            print(f"{Color.CYAN}Creating default vkBasalt configuration...{Color.END}")
-            
-            if not self.config.dry_run:
-                config_dir.mkdir(parents=True, exist_ok=True)
-                
-                default_config = """# vkBasalt Configuration
-# Enable effects (comma-separated list)
-effects = cas,fxaa
 
-# Contrast Adaptive Sharpening
-cas = on
+        self.banner("VKBASALT INSTALLATION")
+
+        success, _, _ = self.run_command(
+            ["apt-get", "install", "-y", "vkbasalt"],
+            "Installing vkBasalt", check=False
+        )
+
+        if not success:
+            print(f"{Color.YELLOW}⚠ vkBasalt not in repos{Color.END}")
+            print(f"{Color.CYAN}  Manual: https://github.com/DadSchoworseorse/vkBasalt{Color.END}")
+            return
+
+        # Create default config
+        config_dir = REAL_USER_HOME / ".config" / "vkBasalt"
+        config_file = config_dir / "vkBasalt.conf"
+
+        if not config_file.exists():
+            config_dir.mkdir(parents=True, exist_ok=True)
+
+            default_config = """# vkBasalt Configuration
+# Toggle effects in-game: Home key
+toggleKey = Home
+
+# Effects (uncomment to enable)
+effects = cas
+#effects = cas:fxaa
+#effects = cas:smaa:lut
+
+# CAS (Contrast Adaptive Sharpening) settings
 casSharpness = 0.4
 
-# Fast Approximate Anti-Aliasing
-fxaa = on
-fxaaQualitySubpix = 0.75
-fxaaQualityEdgeThreshold = 0.125
-fxaaQualityEdgeThresholdMin = 0.0312
+# FXAA settings
+#fxaaQualitySubpix = 0.75
+#fxaaQualityEdgeThreshold = 0.125
 
-# Toggle key (Home key)
-toggleKey = Home
+# SMAA settings
+#smaaEdgeDetection = luma
+#smaaThreshold = 0.05
 """
+            if not self.config.dry_run:
                 with open(config_file, 'w') as f:
                     f.write(default_config)
-                
-                # Set ownership
+
                 uid, gid = get_real_user_uid_gid()
                 os.chown(config_dir, uid, gid)
                 os.chown(config_file, uid, gid)
-                
+
                 print(f"{Color.GREEN}✓ Configuration created: {config_file}{Color.END}")
-        
+                self._record_file_create(
+                    str(config_file), "vkBasalt configuration file created"
+                )
+
         print(f"\n{Color.BOLD}vkBasalt Usage:{Color.END}")
-        print(f"  Enable for a game:")
-        print(f"    ENABLE_VKBASALT=1 %command%  (in Steam launch options)")
-        print(f"  Or:")
-        print(f"    ENABLE_VKBASALT=1 game_binary")
-        print(f"\n  Toggle effects in-game: Press Home key")
-        print(f"  Config file: {config_file}")
-    
+        print(f"  ENABLE_VKBASALT=1 %command%  (in Steam launch options)")
+        print(f"  Toggle in-game: Press Home key")
+
     def show_reshade_info(self):
-        """
-        Show ReShade setup information for Linux
-        
-        NEW FEATURE: Provide guidance on using ReShade effects via vkBasalt
-        """
-        if not (self.config.install_reshade_setup or \
-                self.confirm("Show ReShade setup information?")):
+        """Show ReShade setup information - """
+        if not (self.config.install_reshade_setup or self.confirm("Show ReShade setup information?")):
             return
-        
+
         self.banner("RESHADE ON LINUX")
-        
+
         print(f"{Color.BOLD}ReShade on Linux{Color.END}\n")
-        print(f"{Color.CYAN}ReShade is a Windows tool, but you can achieve similar effects on Linux using:{Color.END}\n")
-        
+        print(f"{Color.CYAN}ReShade is a Windows tool, but you can achieve similar effects on Linux:{Color.END}\n")
         print(f"{Color.BOLD}1. vkBasalt (Recommended){Color.END}")
-        print(f"   • Native Linux Vulkan layer")
-        print(f"   • Includes common effects (CAS, FXAA, SMAA)")
-        print(f"   • Lightweight and performant")
-        print(f"   • Install with: --vkbasalt flag\n")
-        
+        print(f"   Native Linux Vulkan layer with CAS, FXAA, SMAA\n")
         print(f"{Color.BOLD}2. ReShade via Wine/Proton{Color.END}")
-        print(f"   • Some ReShade shaders work through Proton")
-        print(f"   • Copy ReShade files to game directory")
-        print(f"   • Set WINEDLLOVERRIDES=\"d3d11=n,b\" for D3D11 games\n")
-        
+        print(f"   Copy ReShade files to game directory\n")
         print(f"{Color.BOLD}3. GShade (Community Fork){Color.END}")
-        print(f"   • Fork of ReShade for Linux")
-        print(f"   • More extensive shader library")
-        print(f"   • Manual installation required")
-        print(f"   • GitHub: https://github.com/Mortalitas/GShade-Shaders\n")
-        
+        print(f"   GitHub: https://github.com/Mortalitas/GShade-Shaders\n")
+
         if self.confirm("Install vkBasalt now?"):
             self.install_vkbasalt()
-    
+
     def install_mod_managers(self):
-        """
-        Install mod management tools
-        
-        NEW FEATURE: Tools for managing game mods
-        """
+        """Install mod management tools - """
         should_install = self.config.install_mod_managers or \
                         self.confirm("Install mod management tools?")
-        
         if not should_install:
             return
-        
+
         self.banner("MOD MANAGER INSTALLATION")
-        
+
         print(f"{Color.BOLD}Available Mod Managers for Linux:{Color.END}\n")
-        
-        # Mod Organizer 2 via Wine
+
         if self.confirm("Install Mod Organizer 2 (via Lutris)?"):
             print(f"{Color.CYAN}Mod Organizer 2 Setup:{Color.END}")
-            print(f"  1. Install Lutris (if not already installed)")
-            print(f"  2. Visit: https://lutris.net/games/mod-organizer-2/")
-            print(f"  3. Click 'Install' and follow prompts")
-            print(f"  4. Works with Skyrim, Fallout, and other Bethesda games\n")
-        
-        # Vortex Mod Manager
-        if self.confirm("Show Vortex Mod Manager information?"):
-            print(f"{Color.CYAN}Vortex Mod Manager:{Color.END}")
-            print(f"  • Official Nexus Mods manager")
-            print(f"  • Runs via Wine/Proton")
-            print(f"  • Install via Lutris: https://lutris.net/games/vortex-mod-manager/")
-            print(f"  • Or manually with Wine\n")
-        
-        # r2modman (for Unity games)
-        if self.confirm("Install r2modman (Risk of Rain 2, Valheim mods)?"):
+            print(f"  1. Install Lutris if not already installed")
+            print(f"  2. Search Lutris for 'Mod Organizer 2'")
+            print(f"  3. Follow the Lutris installation script\n")
+
+        if self.confirm("Show Vortex Mod Manager instructions?"):
+            print(f"{Color.CYAN}Vortex Mod Manager (via Proton):{Color.END}")
+            print(f"  1. Download from https://www.nexusmods.com/about/vortex/")
+            print(f"  2. Run through Proton/Wine\n")
+
+        if self.confirm("Install r2modman?"):
             print(f"{Color.CYAN}Installing r2modman via Flatpak...{Color.END}")
-            
-            # Ensure Flatpak
-            if not self.is_package_installed("flatpak"):
-                self.run_command(["apt-get", "install", "-y", "flatpak"], 
-                               "Installing Flatpak")
-            
-            # Add Flathub
+            if not self.ensure_flatpak_ready():
+                return
             self.run_command(
-                ["flatpak", "remote-add", "--if-not-exists", "flathub", 
-                 "https://flathub.org/repo/flathub.flatpakrepo"],
-                "Adding Flathub repository",
-                check=False
-            )
-            
-            # Install r2modman
-            success, _, _ = self.run_command(
                 ["flatpak", "install", "-y", "flathub", "com.thunderstore.r2modman"],
-                "Installing r2modman",
-                check=False
+                "Installing r2modman", check=False
             )
-            
-            if success:
-                print(f"{Color.GREEN}✓ r2modman installed{Color.END}")
-            else:
-                print(f"{Color.YELLOW}Note: r2modman may not be available on Flathub yet{Color.END}")
-                print(f"{Color.CYAN}  Download from: https://github.com/ebkr/r2modmanPlus/releases{Color.END}")
-        
-        print(f"\n{Color.BOLD}Additional Resources:{Color.END}")
-        print(f"  • Nexus Mods: https://www.nexusmods.com/")
-        print(f"  • ModDB: https://www.moddb.com/")
-        print(f"  • Thunderstore: https://thunderstore.io/")
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # SYSTEM OPTIMIZATIONS - PRESERVED FROM ORIGINAL
+    # SYSTEM OPTIMIZATIONS
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
     def optimize_system(self):
-        """
-        Apply gaming optimizations
-        
-        PRESERVED FROM ORIGINAL: Exact same sysctl and governor configuration
-        """
+        """Apply gaming system optimizations - """
         self.banner("SYSTEM OPTIMIZATIONS")
-        
-        if not self.confirm("Apply gaming optimizations?"):
-            return
-        
-        # Increase file watchers - PRESERVED FROM ORIGINAL
-        print(f"{Color.CYAN}Increasing inotify watchers...{Color.END}")
-        
+        self.current_phase = InstallationPhase.OPTIMIZATION
+
+        print(f"{Color.CYAN}Applying gaming optimizations...{Color.END}")
+
+        # Increase inotify watchers
+        sysctl_settings = {
+            'fs.inotify.max_user_watches': '524288',
+            'vm.max_map_count': '2147483642',
+        }
+
+        sysctl_file = "/etc/sysctl.d/99-gaming.conf"
+        sysctl_content = "# Gaming optimizations\n"
+        for key, value in sysctl_settings.items():
+            sysctl_content += f"{key}={value}\n"
+
         if not self.config.dry_run:
-            with open('/etc/sysctl.d/99-gaming.conf', 'w') as f:
-                f.write("# Gaming optimizations\n")
-                f.write("fs.inotify.max_user_watches=524288\n")
-                f.write("vm.max_map_count=2147483642\n")
-            
-            self.run_command(
-                ["sysctl", "-p", "/etc/sysctl.d/99-gaming.conf"],
-                "Applying sysctl optimizations"
-            )
-        
-        # Enable performance governor - PRESERVED FROM ORIGINAL
-        if self.confirm("Set CPU governor to performance mode?"):
-            packages = ["cpufrequtils"]
-            self.run_command(
-                ["apt-get", "install", "-y"] + packages,
-                "Installing CPU frequency utilities"
-            )
-            
-            # Create systemd service for performance governor - PRESERVED FROM ORIGINAL
-            governor_service = """[Unit]
-Description=Set CPU Governor to Performance
-After=multi-user.target
+            try:
+                with open(sysctl_file, 'w') as f:
+                    f.write(sysctl_content)
+                print(f"{Color.GREEN}✓ System tweaks written to {sysctl_file}{Color.END}")
+                self.record_action(
+                    action_type=ActionType.SYSCTL_WRITE,
+                    description=f"Gaming sysctl config written to {sysctl_file}",
+                    files=[sysctl_file],
+                    reversal_commands=[
+                        ["rm", "-f", sysctl_file],
+                        ["sysctl", "--system"],
+                    ],
+                )
+            except IOError as e:
+                logging.error(f"Could not write sysctl config: {e}")
 
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/cpufreq-set -r -g performance
+        self.run_command(
+            ["sysctl", "--system"],
+            "Applying sysctl settings",
+            check=False
+        )
 
-[Install]
-WantedBy=multi-user.target
-"""
-            if not self.config.dry_run:
-                with open('/etc/systemd/system/cpu-performance.service', 'w') as f:
-                    f.write(governor_service)
-                
-                commands = [
-                    (["systemctl", "daemon-reload"], "Reloading systemd"),
-                    (["systemctl", "enable", "cpu-performance.service"], 
-                     "Enabling performance governor service")
-                ]
-                for cmd, desc in commands:
-                    self.run_command(cmd, desc)
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # PERFORMANCE LAUNCHER - PRESERVED FROM ORIGINAL
-    # ═══════════════════════════════════════════════════════════════════════════
-    
+        print(f"{Color.GREEN}✓ Gaming optimizations applied{Color.END}")
+
     def create_performance_script(self):
         """
-        Create a gaming performance launcher script
-        
-        PRESERVED FROM ORIGINAL: Exact same script with CPU governor and GameMode
+        Create performance launcher script with correct multilib handling.
+
+        Generates ~/launch-game.sh that properly wraps games with GameMode
+        and MangoHud while avoiding LD_PRELOAD multilib conflicts that occur
+        when 64-bit preload libraries are passed to 32-bit child processes
+        (e.g., Steam's 32-bit runtime, wine32).
+
+        Key design decisions:
+        - Uses MANGOHUD=1 env var instead of 'mangohud' wrapper to avoid
+          LD_PRELOAD /usr/$LIB/mangohud/libMangoHud.so path issues
+        - Validates GameMode library presence before enabling gamemoderun
+        - Creates default MangoHud config if missing
+        - Steam-specific handling: sets launch options instead of wrapping
         """
         self.banner("PERFORMANCE LAUNCHER")
-        
-        if not self.confirm("Create gaming performance launcher script?"):
-            return
-        
-        # User's home directory script - PRESERVED FROM ORIGINAL
-        user_script_path = REAL_USER_HOME / "launch-game.sh"
-        
-        # System-wide script location - PRESERVED FROM ORIGINAL
-        system_script_path = Path("/usr/local/bin/launch-game")
-        
-        # PRESERVED FROM ORIGINAL: Exact same script content
-        script_content = """#!/bin/bash
-# Gaming Performance Launcher
-# Usage: ./launch-game.sh <game_command>
-# Or: launch-game <game_command> (if installed system-wide)
 
-# Color codes for output
-RED='\\033[0;31m'
-GREEN='\\033[0;32m'
-YELLOW='\\033[1;33m'
-NC='\\033[0m' # No Color
+        script_path = REAL_USER_HOME / "launch-game.sh"
+        mangohud_config_dir = REAL_USER_HOME / ".config" / "MangoHud"
+        mangohud_config_file = mangohud_config_dir / "MangoHud.conf"
 
-# Function to check if command exists
-command_exists() {
-    command -v "$1" &> /dev/null
-}
+        # Create default MangoHud config if it doesn't exist
+        if not mangohud_config_file.exists() and not self.config.dry_run:
+            try:
+                mangohud_config_dir.mkdir(parents=True, exist_ok=True)
+                mangohud_default = (
+                    "# MangoHud Configuration\n"
+                    "# Created by Debian Gaming Setup Script\n"
+                    "# See: https://github.com/flightlessmango/MangoHud\n"
+                    "\n"
+                    "# Display position (top-left, top-right, bottom-left, bottom-right)\n"
+                    "position=top-left\n"
+                    "\n"
+                    "# Toggle overlay visibility\n"
+                    "toggle_hud=Shift_R+F12\n"
+                    "\n"
+                    "# What to display\n"
+                    "gpu_stats\n"
+                    "gpu_temp\n"
+                    "cpu_stats\n"
+                    "cpu_temp\n"
+                    "ram\n"
+                    "fps\n"
+                    "frametime=0\n"
+                    "frame_timing\n"
+                    "\n"
+                    "# Appearance\n"
+                    "background_alpha=0.4\n"
+                    "font_size=20\n"
+                    "round_corners=5\n"
+                )
+                with open(mangohud_config_file, 'w') as f:
+                    f.write(mangohud_default)
+                uid, gid = get_real_user_uid_gid()
+                os.chown(mangohud_config_dir, uid, gid)
+                os.chown(mangohud_config_file, uid, gid)
+                print(f"{Color.GREEN}✓ Default MangoHud config created: {mangohud_config_file}{Color.END}")
+                self._record_file_create(str(mangohud_config_file), "MangoHud config created")
+            except (IOError, OSError) as e:
+                logging.warning(f"Could not create MangoHud config: {e}")
 
-# Function to safely set CPU governor
-set_cpu_governor() {
-    local governor="$1"
-    
-    # Check if cpupower is available (preferred)
-    if command_exists cpupower; then
-        sudo cpupower frequency-set -g "$governor" &> /dev/null
-        return $?
-    # Fallback to cpufreq-set if available
-    elif command_exists cpufreq-set; then
-        sudo cpufreq-set -r -g "$governor" &> /dev/null
-        return $?
-    fi
-    
-    return 1
-}
+        script_content = r'''#!/bin/bash
+# ═══════════════════════════════════════════════════════════════════
+# Gaming Performance Launcher — launch-game.sh
+# Created by Debian Gaming Setup Script
+#
+# Usage:
+#   ~/launch-game.sh <game-command> [args...]
+#   ~/launch-game.sh steam
+#   ~/launch-game.sh /path/to/game.exe  (via Wine/Proton)
+#
+# Features:
+#   - CPU governor set to performance mode during gameplay
+#   - GameMode integration (if installed) with multilib validation
+#   - MangoHud overlay via MANGOHUD=1 env var (avoids LD_PRELOAD issues)
+#   - Steam-specific handling to avoid 32-bit subprocess conflicts
+# ═══════════════════════════════════════════════════════════════════
 
-echo "======================================"
-echo "  Gaming Performance Launcher"
-echo "======================================"
+set -euo pipefail
 
-# Check if game command provided
+# ── Color output ──────────────────────────────────────────────────
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
+
+echo -e "${BOLD}=== Gaming Performance Mode ===${NC}"
+
+# ── Validate arguments ────────────────────────────────────────────
 if [ $# -eq 0 ]; then
-    echo -e "${RED}Error: No game command provided${NC}"
-    echo "Usage: $0 <game_command>"
-    echo "Example: $0 steam"
-    echo "Example: $0 lutris"
+    echo -e "${YELLOW}Usage: $0 <game-command> [args...]${NC}"
+    echo -e "  Examples:"
+    echo -e "    $0 steam"
+    echo -e "    $0 lutris"
+    echo -e "    $0 wine /path/to/game.exe"
+    echo -e "    $0 gamescope -- mangohud %command%"
     exit 1
 fi
 
-# Enable GameMode if available
-GAMEMODE=""
-if command_exists gamemoderun; then
-    GAMEMODE="gamemoderun"
-    echo -e "${GREEN}✓${NC} GameMode: ENABLED"
-else
-    echo -e "${YELLOW}!${NC} GameMode: Not available (install with: sudo apt install gamemode)"
-fi
+GAME_CMD="$1"
+shift
+GAME_ARGS=("$@")
+CLEANUP_TASKS=()
 
-# Try to set CPU governor to performance
-echo -n "CPU Governor: "
-if set_cpu_governor "performance"; then
-    echo -e "${GREEN}PERFORMANCE${NC}"
-    GOVERNOR_CHANGED=1
-else
-    echo -e "${YELLOW}UNCHANGED${NC} (run 'sudo cpupower frequency-set -g performance' manually)"
-    GOVERNOR_CHANGED=0
-fi
+# ── Cleanup handler ───────────────────────────────────────────────
+cleanup() {
+    echo ""
+    for task in "${CLEANUP_TASKS[@]}"; do
+        eval "$task" 2>/dev/null || true
+    done
+    echo -e "${GREEN}Game session ended.${NC}"
+}
+trap cleanup EXIT
 
-# Set process scheduling (best effort, non-critical)
-NICE_CMD=""
-# Don't use nice -n -10 as it requires root and causes permission errors
-# Instead use nice -n -5 which works for regular users
-if command_exists nice; then
-    NICE_CMD="nice -n -5"
-fi
-
-echo "======================================"
-echo "Launching: $@"
-echo "======================================"
-echo ""
-
-# Launch the game with optimizations
-$GAMEMODE $NICE_CMD "$@"
-EXIT_CODE=$?
-
-echo ""
-echo "======================================"
-echo "Game exited with code: $EXIT_CODE"
-echo "======================================"
-
-# Restore CPU governor if we changed it
-if [ $GOVERNOR_CHANGED -eq 1 ]; then
-    echo -n "Restoring CPU Governor: "
-    if set_cpu_governor "ondemand" || set_cpu_governor "powersave"; then
-        echo -e "${GREEN}RESTORED${NC}"
-    else
-        echo -e "${YELLOW}UNCHANGED${NC} (will reset on reboot)"
+# ── CPU Governor ──────────────────────────────────────────────────
+# Set to performance mode for the duration of the game session
+GOVERNOR_PREV=""
+if command -v cpupower &>/dev/null; then
+    # Save current governor to restore later
+    GOVERNOR_PREV=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "")
+    if [ -n "$GOVERNOR_PREV" ]; then
+        echo -e "  ${CYAN}CPU governor:${NC} $GOVERNOR_PREV → performance"
+        sudo cpupower frequency-set -g performance &>/dev/null && \
+            CLEANUP_TASKS+=("echo -e '  ${CYAN}CPU governor:${NC} restoring $GOVERNOR_PREV'; sudo cpupower frequency-set -g $GOVERNOR_PREV &>/dev/null")
+    fi
+elif [ -w "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor" ]; then
+    GOVERNOR_PREV=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "")
+    if [ -n "$GOVERNOR_PREV" ] && [ "$GOVERNOR_PREV" != "performance" ]; then
+        echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor &>/dev/null
+        echo -e "  ${CYAN}CPU governor:${NC} $GOVERNOR_PREV → performance"
+        CLEANUP_TASKS+=("echo '$GOVERNOR_PREV' | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor &>/dev/null")
     fi
 fi
 
-exit $EXIT_CODE
-"""
-        
-        # Create in user's home directory - PRESERVED FROM ORIGINAL
+# ── GameMode ──────────────────────────────────────────────────────
+# Only enable gamemoderun if:
+#   1. gamemoderun binary exists
+#   2. libgamemodeauto.so.0 is resolvable by the dynamic linker
+# This prevents "cannot open shared object" errors for 32-bit children
+USE_GAMEMODE=false
+if command -v gamemoderun &>/dev/null; then
+    # Verify the shared library is actually loadable
+    if ldconfig -p 2>/dev/null | grep -q "libgamemodeauto.so.0"; then
+        USE_GAMEMODE=true
+        echo -e "  ${GREEN}GameMode:${NC} enabled (gamemoderun wrapper)"
+    else
+        echo -e "  ${YELLOW}GameMode:${NC} binary found but libgamemodeauto.so.0 missing from ldconfig"
+        echo -e "    Try: sudo apt install libgamemode0 libgamemode0:i386"
+    fi
+else
+    echo -e "  ${YELLOW}GameMode:${NC} not installed (optional)"
+fi
+
+# ── MangoHud ──────────────────────────────────────────────────────
+# Use MANGOHUD=1 environment variable instead of the 'mangohud' wrapper.
+# The 'mangohud' command sets LD_PRELOAD=/usr/$LIB/mangohud/libMangoHud.so
+# which causes two problems:
+#   1. $LIB doesn't expand correctly in all shell contexts
+#   2. 64-bit preload path breaks 32-bit Steam/Wine child processes
+# MANGOHUD=1 activates via the Vulkan implicit layer instead — no LD_PRELOAD.
+USE_MANGOHUD=false
+if command -v mangohud &>/dev/null || [ -f "/usr/share/vulkan/implicit_layer.d/MangoHud.x86_64.json" ]; then
+    USE_MANGOHUD=true
+    export MANGOHUD=1
+    export MANGOHUD_DLSYM=1
+    echo -e "  ${GREEN}MangoHud:${NC} enabled via MANGOHUD=1 (Shift+F12 to toggle)"
+
+    # Check for config file
+    CONFIG_FILE="${HOME}/.config/MangoHud/MangoHud.conf"
+    if [ -f "$CONFIG_FILE" ]; then
+        echo -e "    Config: $CONFIG_FILE"
+    else
+        echo -e "    ${YELLOW}No config file found at $CONFIG_FILE${NC}"
+        echo -e "    Using defaults. See: https://github.com/flightlessmango/MangoHud#mangohudconf"
+    fi
+else
+    echo -e "  ${YELLOW}MangoHud:${NC} not installed (optional)"
+fi
+
+# ── Steam-specific handling ───────────────────────────────────────
+# When launching Steam directly, we avoid wrapping with gamemoderun
+# because Steam launches many 32-bit child processes that break with
+# 64-bit-only LD_PRELOAD. Instead, we set environment variables and
+# instruct the user to use Steam's launch options for per-game config.
+IS_STEAM=false
+case "$(basename "$GAME_CMD")" in
+    steam|steam-runtime)
+        IS_STEAM=true
+        echo ""
+        echo -e "${BOLD}Steam Launch Notes:${NC}"
+        echo -e "  MangoHud and GameMode are best configured per-game via Steam."
+        echo -e "  Right-click game → Properties → Launch Options, then use:"
+        if $USE_MANGOHUD && $USE_GAMEMODE; then
+            echo -e "    ${CYAN}gamemoderun mangohud %command%${NC}"
+        elif $USE_MANGOHUD; then
+            echo -e "    ${CYAN}mangohud %command%${NC}"
+        elif $USE_GAMEMODE; then
+            echo -e "    ${CYAN}gamemoderun %command%${NC}"
+        fi
+        echo ""
+        ;;
+esac
+
+# ── Launch ────────────────────────────────────────────────────────
+echo -e "\n${BOLD}Launching:${NC} $GAME_CMD ${GAME_ARGS[*]:-}"
+echo "══════════════════════════════════════════════"
+
+if $IS_STEAM; then
+    # Launch Steam without gamemoderun wrapper to avoid multilib LD_PRELOAD
+    # MANGOHUD=1 env var is already set and will be inherited
+    exec "$GAME_CMD" "${GAME_ARGS[@]:-}"
+else
+    # Non-Steam games: safe to wrap with gamemoderun since we validated the lib
+    if $USE_GAMEMODE; then
+        exec gamemoderun "$GAME_CMD" "${GAME_ARGS[@]:-}"
+    else
+        exec "$GAME_CMD" "${GAME_ARGS[@]:-}"
+    fi
+fi
+'''
+
         if not self.config.dry_run:
-            with open(user_script_path, 'w') as f:
-                f.write(script_content)
-            
-            os.chmod(user_script_path, 0o755)
-            
-            # Set proper ownership - PRESERVED FROM ORIGINAL
             try:
+                with open(script_path, 'w') as f:
+                    f.write(script_content)
+                os.chmod(script_path, 0o755)
+
                 uid, gid = get_real_user_uid_gid()
-                os.chown(user_script_path, uid, gid)
-            except Exception as e:
-                logging.warning(f"Could not set ownership on user script: {e}")
-        
-        print(f"{Color.GREEN}✓ Performance launcher created: {user_script_path}{Color.END}")
-        print(f"  Usage: {user_script_path} <game_command>")
-        
-        # Optionally create system-wide version - PRESERVED FROM ORIGINAL
-        if self.confirm("Also install system-wide as 'launch-game' command?"):
-            try:
-                if not self.config.dry_run:
-                    with open(system_script_path, 'w') as f:
-                        f.write(script_content)
-                    os.chmod(system_script_path, 0o755)
-                print(f"{Color.GREEN}✓ System-wide launcher installed{Color.END}")
-                print(f"  Usage: launch-game <game_command>")
-            except Exception as e:
-                logging.error(f"Could not create system-wide script: {e}")
-                print(f"{Color.YELLOW}Could not create system-wide script, but user script is available{Color.END}")
-        
-        # Offer to configure passwordless sudo for CPU governor - PRESERVED FROM ORIGINAL
-        if self.confirm("Configure passwordless sudo for CPU governor? (Recommended)"):
-            self.configure_cpufreq_sudo()
-    
-    def configure_cpufreq_sudo(self):
-        """
-        Configure passwordless sudo for CPU frequency management
-        
-        PRESERVED FROM ORIGINAL: Exact same sudoers configuration
-        """
-        sudoers_file = Path("/etc/sudoers.d/gaming-cpufreq")
-        
-        # Determine which tool is available - PRESERVED FROM ORIGINAL
-        cpufreq_tools = []
-        if subprocess.run(["which", "cpupower"], capture_output=True).returncode == 0:
-            cpufreq_tools.append("/usr/bin/cpupower")
-        if subprocess.run(["which", "cpufreq-set"], capture_output=True).returncode == 0:
-            cpufreq_tools.append("/usr/bin/cpufreq-set")
-        
-        if not cpufreq_tools:
-            print(f"{Color.YELLOW}⚠ No CPU frequency tools found{Color.END}")
-            print(f"  Installing cpupower...")
-            self.run_command(
-                ["apt-get", "install", "-y", "linux-cpupower"],
-                "Installing CPU power management tools"
-            )
-            cpufreq_tools = ["/usr/bin/cpupower"]
-        
-        # Build sudoers content - PRESERVED FROM ORIGINAL
-        sudoers_lines = [
-            f"# Allow {REAL_USER} to manage CPU frequency for gaming",
-            f"# Created by Ubuntu Gaming Setup Script",
-            ""
-        ]
-        
-        for tool in cpufreq_tools:
-            sudoers_lines.append(f"{REAL_USER} ALL=(ALL) NOPASSWD: {tool}")
-        
-        sudoers_content = "\n".join(sudoers_lines) + "\n"
-        
-        try:
-            if not self.config.dry_run:
-                # Create sudoers file - PRESERVED FROM ORIGINAL
-                with open(sudoers_file, 'w') as f:
-                    f.write(sudoers_content)
-                
-                # Set correct permissions (sudoers files must be 0440) - PRESERVED FROM ORIGINAL
-                os.chmod(sudoers_file, 0o440)
-                
-                # Validate sudoers file - PRESERVED FROM ORIGINAL
-                result = subprocess.run(
-                    ["visudo", "-c", "-f", str(sudoers_file)],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
+                os.chown(script_path, uid, gid)
+
+                print(f"{Color.GREEN}✓ Performance launcher created: {script_path}{Color.END}")
+                print(f"{Color.CYAN}  Usage: ~/launch-game.sh steam{Color.END}")
+                print(f"{Color.CYAN}         ~/launch-game.sh lutris{Color.END}")
+                self._record_file_create(
+                    str(script_path), "Performance launcher script created"
                 )
-                
-                if result.returncode == 0:
-                    print(f"{Color.GREEN}✓ Passwordless sudo configured for CPU governor{Color.END}")
-                    print(f"  {REAL_USER} can now run CPU frequency tools without password")
-                    for tool in cpufreq_tools:
-                        print(f"    - {tool}")
+            except IOError as e:
+                logging.error(f"Could not create performance script: {e}")
+        else:
+            print(f"{Color.YELLOW}[DRY RUN] Would create: {script_path}{Color.END}")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # INSTALLATION SUMMARY
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # POST-INSTALL HEALTH CHECK — NEW
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def post_install_health_check(self):
+        """
+        Verify installed components are actually working after installation.
+
+
+        manifest to confirm packages are installed and key binaries exist.
+        """
+        self.banner("POST-INSTALL HEALTH CHECK")
+
+        passed = 0
+        failed = 0
+        warnings = 0
+
+        # Check APT packages from rollback manifest
+        apt_packages = set()
+        for action in self.rollback_actions:
+            if action.action_type == ActionType.APT_INSTALL.value and action.success:
+                apt_packages.update(action.packages)
+
+        if apt_packages:
+            print(f"{Color.BOLD}Verifying APT packages ({len(apt_packages)})...{Color.END}")
+            for pkg in sorted(apt_packages):
+                if self.is_package_installed(pkg):
+                    passed += 1
                 else:
-                    # Remove invalid file - PRESERVED FROM ORIGINAL
-                    sudoers_file.unlink()
-                    print(f"{Color.YELLOW}⚠ Sudoers configuration failed validation, removed{Color.END}")
-                    logging.error(f"Sudoers validation failed: {result.stderr}")
-        
-        except Exception as e:
-            logging.error(f"Could not configure sudoers: {e}")
-            print(f"{Color.YELLOW}⚠ Could not configure passwordless sudo{Color.END}")
-            print(f"  You can manually run: sudo cpupower frequency-set -g performance")
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # INSTALLATION SUMMARY - PRESERVED FROM ORIGINAL (COMPLETE)
-    # ═══════════════════════════════════════════════════════════════════════════
-    
+                    print(f"  {Color.YELLOW}⚠{Color.END} {pkg}: not found after install")
+                    warnings += 1
+            print(f"  {Color.GREEN}✓ {passed} packages verified{Color.END}")
+            if warnings:
+                print(f"  {Color.YELLOW}⚠ {warnings} packages missing "
+                      f"(may be virtual or renamed){Color.END}")
+
+        # Check key binaries
+        print(f"\n{Color.BOLD}Verifying key binaries...{Color.END}")
+        key_binaries = {
+            'steam': self.config.install_steam,
+            'lutris': self.config.install_lutris,
+            'wine': self.config.install_wine,
+            'mangohud': self.config.install_mangohud,
+            'gamemoded': self.config.install_gamemode,
+        }
+
+        for binary, was_requested in key_binaries.items():
+            if not was_requested:
+                continue
+            if shutil.which(binary):
+                print(f"  {Color.GREEN}✓{Color.END} {binary}")
+                passed += 1
+            else:
+                print(f"  {Color.YELLOW}⚠{Color.END} {binary}: not in PATH")
+                warnings += 1
+
+        # Check Flatpak apps
+        flatpak_apps = set()
+        for action in self.rollback_actions:
+            if action.action_type == ActionType.FLATPAK_INSTALL.value and action.success:
+                flatpak_apps.update(action.packages)
+
+        if flatpak_apps:
+            print(f"\n{Color.BOLD}Verifying Flatpak apps ({len(flatpak_apps)})...{Color.END}")
+            for app_id in sorted(flatpak_apps):
+                if self.is_flatpak_installed(app_id):
+                    print(f"  {Color.GREEN}✓{Color.END} {app_id}")
+                    passed += 1
+                else:
+                    print(f"  {Color.RED}✗{Color.END} {app_id}: not installed")
+                    failed += 1
+
+        # Check GPU driver (if applicable)
+        if self.hardware_info.gpu_vendor != GPUVendor.UNKNOWN:
+            print(f"\n{Color.BOLD}Verifying GPU driver...{Color.END}")
+            gpu_name = self.hardware_info.gpu_vendor.value
+
+            if self.hardware_info.gpu_vendor == GPUVendor.NVIDIA:
+                if shutil.which('nvidia-smi'):
+                    success, stdout, _ = self.run_command(
+                        ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+                        "", check=False
+                    )
+                    if success and stdout.strip():
+                        print(f"  {Color.GREEN}✓{Color.END} NVIDIA driver: v{stdout.strip()}")
+                        passed += 1
+                    else:
+                        print(f"  {Color.YELLOW}⚠{Color.END} NVIDIA: nvidia-smi present but no driver version")
+                        warnings += 1
+                else:
+                    print(f"  {Color.YELLOW}⚠{Color.END} NVIDIA: nvidia-smi not found (reboot may be required)")
+                    warnings += 1
+            elif self.hardware_info.gpu_vendor == GPUVendor.AMD:
+                # Check for AMDGPU kernel module
+                success, stdout, _ = self.run_command(
+                    ["lsmod"], "", check=False
+                )
+                if success and 'amdgpu' in stdout:
+                    print(f"  {Color.GREEN}✓{Color.END} AMD: amdgpu module loaded")
+                    passed += 1
+                else:
+                    print(f"  {Color.YELLOW}⚠{Color.END} AMD: amdgpu module not loaded (reboot may be needed)")
+                    warnings += 1
+            else:
+                print(f"  {Color.GREEN}✓{Color.END} GPU type: {gpu_name}")
+                passed += 1
+
+        # Summary
+        total = passed + failed + warnings
+        print(f"\n{Color.BOLD}Health Check Summary:{Color.END}")
+        print(f"  {Color.GREEN}✓ Passed:   {passed}{Color.END}")
+        if warnings:
+            print(f"  {Color.YELLOW}⚠ Warnings: {warnings}{Color.END}")
+        if failed:
+            print(f"  {Color.RED}✗ Failed:   {failed}{Color.END}")
+
+        if failed == 0:
+            print(f"\n{Color.GREEN}✓ Health check passed ({passed}/{total}){Color.END}")
+        else:
+            print(f"\n{Color.YELLOW}⚠ Some checks failed — review above{Color.END}")
+
+        logging.info(
+            f"Health check: {passed} passed, {warnings} warnings, {failed} failed"
+        )
+
     def show_installation_summary(self):
-        """
-        Show summary of installed gaming components
-        
-        PRESERVED FROM ORIGINAL: This is the comprehensive summary that shows
-        actual installed package versions. This was completely missing in my
-        simplified version and is now fully restored.
-        """
+        """Show installation summary - """
         self.banner("INSTALLATION SUMMARY")
-        
+
         print(f"{Color.BOLD}Installed Components:{Color.END}\n")
-        
-        # Check GPU/VM drivers - PRESERVED FROM ORIGINAL
+
+        # GPU/VM drivers
         print(f"{Color.BOLD}Graphics Drivers:{Color.END}")
-        
-        # NVIDIA check - PRESERVED FROM ORIGINAL
+
         try:
-            result = subprocess.run(["nvidia-smi"], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(["nvidia-smi"], capture_output=True, text=True, timeout=TIMEOUT_QUICK)
             if result.returncode == 0:
                 for line in result.stdout.split('\n'):
                     if 'Driver Version:' in line:
                         version = line.split('Driver Version:')[1].split()[0]
                         print(f"  ✓ NVIDIA Driver      {version}")
                         break
-        except:
+        except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
-        
-        # VMware check - PRESERVED FROM ORIGINAL
+
         if self.is_package_installed("open-vm-tools"):
             version = self.get_package_version("open-vm-tools")
             print(f"  ✓ VMware Tools       {version if version else 'installed'}")
-        
-        # VirtualBox check - PRESERVED FROM ORIGINAL
+
         if self.is_package_installed("virtualbox-guest-utils"):
             version = self.get_package_version("virtualbox-guest-utils")
             print(f"  ✓ VirtualBox Guest   {version if version else 'installed'}")
-        
-        # Mesa check (AMD/Intel) - PRESERVED FROM ORIGINAL
+
         if self.is_package_installed("mesa-vulkan-drivers"):
             version = self.get_package_version("mesa-vulkan-drivers")
             print(f"  ✓ Mesa Vulkan        {version if version else 'installed'}")
-        
+
         print()
-        
-        # Gaming platforms - PRESERVED FROM ORIGINAL
+
+        # Gaming platforms and tools
         print(f"{Color.BOLD}Gaming Platforms:{Color.END}")
-        
-        # PRESERVED FROM ORIGINAL: Exact same component list
+
         components = {
-            "Steam": "steam-installer",
-            "GameMode": "gamemode",
-            "Wine": "winehq-staging",
-            "Winetricks": "winetricks",
-            "OBS Studio": "obs-studio"
+            "Steam": "steam-installer", "GameMode": "gamemode",
+            "Wine": "winehq-staging", "Winetricks": "winetricks",
+            "OBS Studio": "obs-studio", "MangoHud": "mangohud",
+            "Goverlay": "goverlay", "Mumble": "mumble",
+            "vkBasalt": "vkbasalt", "Waydroid": "waydroid"
         }
-        
+
         for name, package in components.items():
             if self.is_package_installed(package):
                 version = self.get_package_version(package)
                 if version and len(version) > 30:
                     version = version[:27] + "..."
                 print(f"  ✓ {name:20} {version if version else 'installed'}")
-        
-        # ENHANCED: Add new components to summary
-        new_components = {
-            "MangoHud": "mangohud",
-            "Goverlay": "goverlay",
-            "Mumble": "mumble",
-            "vkBasalt": "vkbasalt",
-            "Waydroid": "waydroid"
-        }
-        
-        for name, package in new_components.items():
-            if self.is_package_installed(package):
-                version = self.get_package_version(package)
-                if version and len(version) > 30:
-                    version = version[:27] + "..."
-                print(f"  ✓ {name:20} {version if version else 'installed'}")
-        
+
         print()
-        
-        # Flatpak apps - PRESERVED FROM ORIGINAL
+
+        # Flatpak apps
         print(f"{Color.BOLD}Flatpak Applications:{Color.END}")
-        
-        # PRESERVED FROM ORIGINAL: Exact same flatpak list
+
         flatpaks = {
             "Lutris": "net.lutris.Lutris",
             "Heroic Launcher": "com.heroicgameslauncher.hgl",
@@ -2997,7 +4425,7 @@ exit $EXIT_CODE
             "Sober (Roblox)": "org.vinegarhq.Sober",
             "GreenWithEnvy": "com.leinardi.gwe"
         }
-        
+
         has_flatpaks = False
         for name, app_id in flatpaks.items():
             if self.is_flatpak_installed(app_id):
@@ -3006,301 +4434,482 @@ exit $EXIT_CODE
                     version = version[:27] + "..."
                 print(f"  ✓ {name:20} {version if version else 'installed'}")
                 has_flatpaks = True
-        
+
         if not has_flatpaks:
             print(f"  {Color.YELLOW}No Flatpak applications installed{Color.END}")
-        
+
         print()
 
-# END OF PART 5
-# Continue with Part 6 for final steps and main execution flow
-# PART 6 (FINAL): State Management, Rollback, Final Steps, and Main Execution
-# All original final steps and instructions preserved with enhancements
+    # ═══════════════════════════════════════════════════════════════════════════
+    # STATE MANAGEMENT
+    # ═══════════════════════════════════════════════════════════════════════════
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # STATE MANAGEMENT - ENHANCED: New feature
-    # ═══════════════════════════════════════════════════════════════════════════
-    
     def load_installation_state(self):
-        """
-        Load previous installation state if exists
-        
-        ENHANCED: New feature for tracking installation progress
-        """
+        """Load previous installation state"""
         if STATE_FILE.exists():
             try:
                 with open(STATE_FILE, 'r') as f:
                     self.installation_state = json.load(f)
                 logging.info(f"Loaded installation state: {len(self.installation_state)} entries")
-            except Exception as e:
+            except (json.JSONDecodeError, IOError, OSError, KeyError) as e:
                 logging.error(f"Could not load installation state: {e}")
-    
+
     def save_installation_state(self):
         """
-        Save current installation state
-        
-        ENHANCED: New feature for tracking installation progress
+        Save current installation state with per-package tracking.
+
+        Now includes a per-package inventory
+        derived from rollback actions, tracking what was installed in each session.
         """
         try:
             self.installation_state['last_updated'] = datetime.now().isoformat()
             self.installation_state['distro'] = self.system_info.distro_name
             self.installation_state['version'] = self.system_info.distro_version
-            
+            self.installation_state['script_version'] = SCRIPT_VERSION
+            self.installation_state['session_id'] = self._session_id
+
+            apt_packages = []
+            flatpak_apps = []
+            files_created = []
+            repos_added = []
+
+            for action in self.rollback_actions:
+                if not action.success:
+                    continue
+                if action.action_type == ActionType.APT_INSTALL.value:
+                    apt_packages.extend(action.packages)
+                elif action.action_type == ActionType.FLATPAK_INSTALL.value:
+                    flatpak_apps.extend(action.packages)
+                elif action.action_type == ActionType.FILE_CREATE.value:
+                    files_created.extend(action.files)
+                elif action.action_type == ActionType.REPO_ADD.value:
+                    repos_added.extend(action.files)
+
+            self.installation_state['installed_packages'] = {
+                'apt': sorted(set(apt_packages)),
+                'flatpak': sorted(set(flatpak_apps)),
+            }
+            self.installation_state['files_created'] = sorted(set(files_created))
+            self.installation_state['repos_added'] = sorted(set(repos_added))
+            self.installation_state['failed_operations'] = self.failed_operations
+            self.installation_state['action_count'] = len(self.rollback_actions)
+
             if not self.config.dry_run:
                 with open(STATE_FILE, 'w') as f:
                     json.dump(self.installation_state, f, indent=2)
-                
-                # Set proper ownership
+
                 uid, gid = get_real_user_uid_gid()
                 os.chown(STATE_FILE, uid, gid)
-            
-            logging.info("Installation state saved")
-        except Exception as e:
+
+            logging.info(
+                f"Installation state saved: {len(apt_packages)} apt packages, "
+                f"{len(flatpak_apps)} flatpak apps, {len(files_created)} files"
+            )
+        except (IOError, OSError, TypeError) as e:
             logging.error(f"Could not save installation state: {e}")
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # ROLLBACK FUNCTIONALITY - ENHANCED: Framework for future implementation
-    # ═══════════════════════════════════════════════════════════════════════════
-    
+
     def perform_rollback(self):
         """
-        Perform rollback of previous installation
-        
-        ENHANCED: Framework in place, ready for full implementation
+        Execute rollback of previous installation by processing actions in reverse.
+
+        Full execution engine replacing stub.
+        Loads the manifest, shows a summary, asks for confirmation, then
+        processes each action's reversal commands in LIFO order.
         """
-        self.banner("ROLLBACK")
-        
-        if not ROLLBACK_FILE.exists():
-            print(f"{Color.YELLOW}No rollback manifest found{Color.END}")
-            print(f"{Color.CYAN}Nothing to rollback{Color.END}")
+        self.banner("ROLLBACK ENGINE")
+
+        # Load manifest (already done in __init__ for --rollback mode)
+        if not self.rollback_actions:
+            if not ROLLBACK_FILE.exists():
+                print(f"{Color.YELLOW}No rollback manifest found{Color.END}")
+                print(f"{Color.CYAN}  Nothing to rollback. Run the installer first.{Color.END}")
+                return
+
+            if not self.load_rollback_manifest():
+                print(f"{Color.RED}Could not load rollback manifest{Color.END}")
+                return
+
+        if not self.rollback_actions:
+            print(f"{Color.YELLOW}Rollback manifest is empty{Color.END}")
             return
-        
-        print(f"{Color.CYAN}Rollback functionality framework in place{Color.END}")
-        print(f"{Color.YELLOW}Full rollback implementation: Use with caution{Color.END}")
-        print(f"{Color.CYAN}Manual cleanup recommended: Check {LOG_DIR} for details{Color.END}")
-    
+
+        # Filter to only successful actions (no point undoing failed ones)
+        reversible = [a for a in self.rollback_actions if a.success and a.reversal_commands]
+
+        if not reversible:
+            print(f"{Color.YELLOW}No reversible actions found in manifest{Color.END}")
+            return
+
+        # Display summary
+        print(f"{Color.BOLD}Rollback Summary:{Color.END}\n")
+        print(f"  Session:  {self._session_id}")
+        print(f"  Actions:  {len(reversible)} reversible "
+              f"(of {len(self.rollback_actions)} total)")
+        print()
+
+        # Group by type for readable display
+        by_type = defaultdict(list)
+        for action in reversible:
+            by_type[action.action_type].append(action)
+
+        type_labels = {
+            ActionType.APT_INSTALL.value: "APT Packages",
+            ActionType.FLATPAK_INSTALL.value: "Flatpak Applications",
+            ActionType.REPO_ADD.value: "Repository Additions",
+            ActionType.FILE_CREATE.value: "Created Files",
+            ActionType.FILE_MODIFY.value: "Modified Files",
+            ActionType.SYSCTL_WRITE.value: "System Config",
+            ActionType.GE_PROTON_INSTALL.value: "GE-Proton",
+        }
+
+        for action_type, actions in by_type.items():
+            label = type_labels.get(action_type, action_type)
+            print(f"  {Color.CYAN}{label}:{Color.END}")
+            for action in actions:
+                pkg_info = ""
+                if action.packages:
+                    pkg_info = f" ({', '.join(action.packages[:5])})"
+                    if len(action.packages) > 5:
+                        pkg_info = pkg_info[:-1] + f", +{len(action.packages)-5} more)"
+                print(f"    - {action.description}{pkg_info}")
+            print()
+
+        # Confirmation
+        print(f"{Color.RED}{Color.BOLD}WARNING: Rollback will attempt to reverse ALL "
+              f"actions listed above.{Color.END}")
+        print(f"{Color.YELLOW}  This may remove packages, delete files, and revert "
+              f"config changes.{Color.END}")
+        print()
+
+        if not self.confirm("Proceed with rollback?"):
+            print("Rollback cancelled.")
+            return
+
+        # Offer dry-run preview
+        if not self.config.auto_yes:
+            if self.confirm("Show dry-run preview first (recommended)?"):
+                self._rollback_dry_run(reversible)
+                print()
+                if not self.confirm("Proceed with actual rollback?"):
+                    print("Rollback cancelled after preview.")
+                    return
+
+        # Execute rollback in reverse order (LIFO)
+        print(f"\n{Color.BOLD}Executing rollback...{Color.END}\n")
+
+        succeeded = 0
+        failed = 0
+
+        for action in reversed(reversible):
+            print(f"  {Color.CYAN}Reversing: {action.description}{Color.END}")
+            logging.info(f"Rollback: reversing [{action.action_type}] {action.description}")
+
+            action_ok = True
+            for reversal_cmd in action.reversal_commands:
+                success, stdout, stderr = self.run_command(
+                    reversal_cmd,
+                    description=f"  Rollback: {' '.join(reversal_cmd[:4])}...",
+                    check=False
+                )
+                if not success:
+                    action_ok = False
+                    logging.warning(
+                        f"Rollback command failed: {' '.join(reversal_cmd)}: {stderr}"
+                    )
+
+            if action_ok:
+                print(f"    {Color.GREEN}✓ Reversed{Color.END}")
+                succeeded += 1
+            else:
+                print(f"    {Color.YELLOW}⚠ Partial/failed reversal{Color.END}")
+                failed += 1
+
+        # Run apt-get update once at the end if we removed any repos
+        if any(a.action_type == ActionType.REPO_ADD.value for a in reversible):
+            self.run_command(
+                ["apt-get", "update"],
+                "Updating package lists after rollback",
+                check=False
+            )
+
+        # Summary
+        print(f"\n{Color.BOLD}Rollback Complete:{Color.END}")
+        print(f"  {Color.GREEN}✓ Succeeded: {succeeded}{Color.END}")
+        if failed:
+            print(f"  {Color.YELLOW}⚠ Failed: {failed}{Color.END}")
+            print(f"  {Color.CYAN}Check logs for details: {LOG_FILE}{Color.END}")
+
+        # Archive the manifest (rename, don't delete, for safety)
+        if not self.config.dry_run:
+            try:
+                archive_path = str(ROLLBACK_FILE) + f".rolled_back_{self._session_id}"
+                os.rename(str(ROLLBACK_FILE), archive_path)
+                print(f"\n{Color.CYAN}Manifest archived: {archive_path}{Color.END}")
+                logging.info(f"Rollback manifest archived to {archive_path}")
+            except OSError as e:
+                logging.warning(f"Could not archive manifest: {e}")
+
+        print(f"\n{Color.YELLOW}Reboot recommended to apply all changes.{Color.END}")
+
+    def _rollback_dry_run(self, actions: list):
+        """
+        Show what rollback would do without executing anything.
+
+
+        """
+        print(f"\n{Color.YELLOW}{'='*60}{Color.END}")
+        print(f"{Color.YELLOW}DRY RUN — These commands would be executed:{Color.END}")
+        print(f"{Color.YELLOW}{'='*60}{Color.END}\n")
+
+        for i, action in enumerate(reversed(actions), 1):
+            print(f"  {Color.BOLD}Step {i}: Reverse [{action.action_type}]{Color.END}")
+            print(f"    {action.description}")
+            for cmd in action.reversal_commands:
+                print(f"    $ {' '.join(cmd)}")
+            print()
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # FINAL STEPS - PRESERVED FROM ORIGINAL WITH VM-SPECIFIC INSTRUCTIONS
+    # FINAL STEPS
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
     def final_steps(self):
-        """
-        Display final instructions
-        
-        PRESERVED FROM ORIGINAL: All VM-specific instructions and guidance
-        """
+        """Display final instructions - """
         self.banner("SETUP COMPLETE")
-        
-        print(f"{Color.GREEN}✓ Ubuntu gaming setup completed successfully!{Color.END}\n")
+
+        print(f"{Color.GREEN}✓ Gaming setup completed successfully!{Color.END}\n")
         print(f"{Color.BOLD}Installation performed for user: {REAL_USER}{Color.END}")
         print(f"{Color.BOLD}User home directory: {REAL_USER_HOME}{Color.END}\n")
-        
+
         print(f"{Color.BOLD}IMPORTANT NEXT STEPS:{Color.END}\n")
-        
+
         print(f"{Color.YELLOW}1. REBOOT YOUR SYSTEM{Color.END}")
         print("   Required for drivers and optimizations to take effect\n")
-        
-        # Check if VM - PRESERVED FROM ORIGINAL with exact same VM-specific notes
+
         vm_type = self.detect_virtualization()
         if vm_type:
             print(f"{Color.CYAN}VM-SPECIFIC NOTES ({vm_type}):{Color.END}")
             if 'vmware' in vm_type.lower():
                 print("   • Enable 3D acceleration in VMware settings")
-                print("   • Allocate at least 2GB video memory for better performance")
+                print("   • Allocate at least 2GB video memory")
                 print("   • Verify tools: vmware-toolbox-cmd -v")
             elif 'virtualbox' in vm_type.lower():
                 print("   • Enable 3D acceleration in VirtualBox settings")
                 print("   • Allocate maximum video memory (128MB+)")
                 print("   • Verify additions: lsmod | grep vbox")
             print()
-        
-        # PRESERVED FROM ORIGINAL: Exact same verification steps
+
         print(f"{Color.YELLOW}2. VERIFY GPU/GRAPHICS{Color.END}")
         if vm_type:
             print("   Run: glxinfo | grep 'OpenGL renderer'")
-            print(f"   Should show: {vm_type} graphics")
         else:
-            print("   - NVIDIA: Run 'nvidia-smi' to verify driver")
+            print("   - NVIDIA: Run 'nvidia-smi'")
             print("   - AMD/Intel: Run 'vulkaninfo' or 'glxinfo | grep OpenGL'")
         print()
-        
-        # PRESERVED FROM ORIGINAL: Exact same Steam configuration
+
         print(f"{Color.YELLOW}3. CONFIGURE STEAM{Color.END}")
-        print("   - Enable Proton: Settings → Steam Play → Enable Steam Play for all titles")
+        print("   - Settings → Steam Play → Enable Steam Play for all titles")
         print("   - Select: Proton Experimental or latest Proton version")
-        if vm_type:
-            print(f"   {Color.CYAN}Note: Some games may have reduced performance in VMs{Color.END}")
         print()
-        
-        # PRESERVED FROM ORIGINAL: ProtonUp-Qt instructions
+
         print(f"{Color.YELLOW}4. INSTALL ADDITIONAL PROTON VERSIONS{Color.END}")
-        print("   - Use ProtonUp-Qt to install Proton-GE for better compatibility\n")
-        
-        # PRESERVED FROM ORIGINAL: Performance launcher usage
+        print("   - Use ProtonUp-Qt to install Proton-GE\n")
+
         print(f"{Color.YELLOW}5. USE PERFORMANCE LAUNCHER{Color.END}")
-        user_launcher = REAL_USER_HOME / "launch-game.sh"
-        if user_launcher.exists():
-            print(f"   User script: {user_launcher} <game>")
-        if Path("/usr/local/bin/launch-game").exists():
-            print(f"   System-wide: launch-game <game>")
-        print()
-        
-        # PRESERVED FROM ORIGINAL: VM gaming tips
-        if vm_type:
-            print(f"{Color.CYAN}VM GAMING TIPS:{Color.END}")
-            print("   • Start with lightweight/indie games to test performance")
-            print("   • 2D games typically run very well in VMs")
-            print("   • 3D games depend heavily on host GPU passthrough")
-            print("   • Check ProtonDB for VM-specific compatibility notes\n")
-        
-        # PRESERVED FROM ORIGINAL: Files created section
-        print(f"{Color.CYAN}FILES CREATED:{Color.END}")
-        print(f"   Logs: {LOG_DIR}")
-        print(f"   Latest log: {LOG_FILE}")
-        if user_launcher.exists():
-            print(f"   Performance launcher: {user_launcher}")
-        if Path("/usr/local/bin/launch-game").exists():
-            print(f"   System launcher: /usr/local/bin/launch-game")
-        print()
-        
-        # Display failed operations if any - ENHANCED
-        if self.failed_operations:
-            print(f"{Color.YELLOW}Failed Operations:{Color.END}")
-            for op in self.failed_operations:
-                print(f"  ✗ {op}")
-            print()
-        
-        # PRESERVED FROM ORIGINAL: Reboot prompt
+        print(f"   ~/launch-game.sh steam\n")
+
+        print(f"{Color.BOLD}Log file: {LOG_FILE}{Color.END}\n")
+
         if self.confirm("Reboot now?"):
-            print(f"{Color.GREEN}Rebooting system...{Color.END}")
             self.run_command(["reboot"], "Rebooting system")
-        else:
-            print(f"{Color.YELLOW}Remember to reboot before gaming!{Color.END}")
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # MAIN EXECUTION FLOW - PRESERVED FROM ORIGINAL WITH ENHANCEMENTS
+    # FLOW CONTROL — CORRECTED
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
+    def _is_interactive_mode(self) -> bool:
+        """
+        Determine if running in interactive mode (no CLI flags) or targeted mode.
+
+
+
+        Interactive mode: No component-specific flags → prompt for everything.
+        Targeted mode: At least one component flag → only install what was flagged.
+
+        Returns:
+            True if running in interactive mode
+        """
+        mode_flags = {
+            'dry_run', 'yes', 'verbose', 'no_backup', 'skip_update',
+            'rollback', 'cleanup'
+        }
+
+        if not hasattr(self, 'args') or not self.args:
+            return True
+
+        for key, value in vars(self.args).items():
+            if key not in mode_flags and value is True:
+                logging.info(f"Targeted mode: flag '--{key}' was set")
+                return False
+
+        logging.info("Interactive mode: no component flags detected, will prompt for all")
+        return True
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # MAIN EXECUTION - CORRECTED FLOW CONTROL
+    # ═══════════════════════════════════════════════════════════════════════════
+
     def run(self):
         """
         Main execution flow
-        
-        PRESERVED FROM ORIGINAL: All installation steps in same order
-        ENHANCED: CLI flag support for automated installation
+
+        Executes all component installations in dependency-correct order
+        Corrected interactive/targeted mode,
+                  network connectivity check, removed 'or True' patterns
         """
-        # Display banner - PRESERVED FROM ORIGINAL format
-        print(f"{Color.BOLD}{Color.HEADER}")
-        print("╔═══════════════════════════════════════════════════════════════════╗")
-        print("║        Debian-Based Gaming Setup Script v2.0                      ║")
-        print("║                                                                    ║")
-        print("║  This script will install and configure:                          ║")
-        print("║  • GPU Drivers (NVIDIA/AMD/Intel) or VM Tools                     ║")
-        print("║  • Gaming Platforms (Steam, Lutris, Heroic)                       ║")
-        print("║  • Wine & Proton Compatibility                                    ║")
-        print("║  • System Optimizations                                           ║")
-        print("╚═══════════════════════════════════════════════════════════════════╝")
-        print(f"{Color.END}\n")
-        
-        print(f"{Color.CYAN}Running as root, installing for user: {Color.BOLD}{REAL_USER}{Color.END}")
-        print(f"{Color.CYAN}User home directory: {REAL_USER_HOME}{Color.END}")
-        print(f"{Color.CYAN}Logs will be saved to: {LOG_DIR}{Color.END}\n")
-        
-        # Dry run notice - ENHANCED
+        self.banner("DEBIAN GAMING SETUP")
+        print(f"{Color.BOLD}Version {SCRIPT_VERSION} — Gaming Environment for Debian{Color.END}\n")
+
         if self.config.dry_run:
-            print(f"{Color.YELLOW}{'═'*70}{Color.END}")
-            print(f"{Color.YELLOW}DRY RUN MODE - No changes will be made to the system{Color.END}")
-            print(f"{Color.YELLOW}{'═'*70}{Color.END}\n")
-        
-        # PRESERVED FROM ORIGINAL: Same confirmation prompt
-        if not self.config.auto_yes and not self.confirm("Continue with installation?"):
+            print(f"{Color.YELLOW}{'='*60}{Color.END}")
+            print(f"{Color.YELLOW}DRY RUN MODE - No changes will be made{Color.END}")
+            print(f"{Color.YELLOW}{'='*60}{Color.END}\n")
+
+        if not self.confirm("This will install gaming components. Continue?"):
             print("Installation cancelled.")
             sys.exit(0)
-        
+
+        interactive = self._is_interactive_mode()
+
         try:
-            # Core setup - PRESERVED FROM ORIGINAL: Same order
-            self.clean_broken_repos()  # PRESERVED FROM ORIGINAL
+            # Pre-flight: Network connectivity
+            self.check_network_connectivity()
+
+            # Pre-flight: System requirements
+            self.check_system_requirements()
+
+            # Core setup — Same order
+            self.clean_broken_repos()
             self.update_system()
             self.enable_32bit_support()
-            
-            # Detect system and hardware - ENHANCED but preserves original detection
+
+            # System and hardware detection
             self.detect_system()
             gpu_type = self.detect_gpu()
-            
-            # GPU/VM detection and driver installation - PRESERVED FROM ORIGINAL logic
+
+            # GPU/VM driver installation — CORRECTED
             if gpu_type in ['vmware', 'virtualbox', 'kvm/qemu', 'vm']:
-                if self.config.install_vm_tools or self.confirm(f"Install {gpu_type} guest tools for better graphics performance?"):
+                if self.config.install_vm_tools or (
+                    interactive and self.confirm(
+                        f"Install {gpu_type} guest tools for better graphics?"
+                    )
+                ):
                     self.install_vm_tools(gpu_type)
-            # Handle physical GPU drivers - PRESERVED FROM ORIGINAL
             elif gpu_type == 'nvidia':
-                if self.config.install_nvidia_drivers or self.confirm("Install NVIDIA drivers?"):
+                if self.config.install_nvidia_drivers or (
+                    interactive and self.confirm("Install NVIDIA drivers?")
+                ):
                     self.install_nvidia_drivers()
             elif gpu_type == 'amd':
-                if self.config.install_amd_drivers or self.confirm("Install AMD drivers?"):
+                if self.config.install_amd_drivers or (
+                    interactive and self.confirm("Install AMD drivers?")
+                ):
                     self.install_amd_drivers()
             elif gpu_type == 'intel':
-                if self.config.install_intel_drivers or self.confirm("Install Intel drivers?"):
+                if self.config.install_intel_drivers or (
+                    interactive and self.confirm("Install Intel drivers?")
+                ):
                     self.install_intel_drivers()
             elif gpu_type == 'generic':
                 print(f"{Color.YELLOW}Installing generic graphics support...{Color.END}")
                 self.install_generic_vm_graphics()
-            
-            # Gaming components - PRESERVED FROM ORIGINAL but with CLI support
-            if self.config.install_essential_packages or self.confirm("Install essential gaming packages?"):
+
+            # Essential packages — CORRECTED
+            if self.config.install_essential_packages or (
+                interactive and self.confirm("Install essential gaming packages?")
+            ):
                 self.install_essential_packages()
-            
-            if self.config.install_codecs or True:  # Always prompt for codecs
+
+            # Codecs — CORRECTED: was `or True`, now properly conditional
+            if self.config.install_codecs or (
+                interactive and self.confirm("Install multimedia codecs?")
+            ):
                 self.install_codecs()
-            
-            self.install_gaming_platforms()  # Uses smart prompts from original
-            self.install_wine_proton()       # Uses smart prompts from original
-            
-            # NEW PLATFORMS
-            self.install_sober()  # NEW: Roblox on Linux
-            self.install_waydroid()  # NEW: Android container
-            
-            # Optional components - PRESERVED FROM ORIGINAL with additions
+
+            # Gaming platforms (use smart prompts from original)
+            self.install_gaming_platforms()
+            self.install_wine_proton()
+
+            # Specialized platforms
+            self.install_sober()
+            self.install_waydroid()
+
+            # Communication & streaming tools
             self.install_discord()
             self.install_obs()
-            self.install_mumble()  # ENHANCED: New
-            self.install_mangohud()  # ENHANCED: New
-            self.install_goverlay()  # ENHANCED: New
-            
-            # NEW UTILITIES
-            self.install_greenwithenv()  # NEW: NVIDIA GPU control
-            self.install_vkbasalt()  # NEW: Vulkan post-processing
-            self.show_reshade_info()  # NEW: ReShade info
-            self.install_mod_managers()  # NEW: Mod management tools
-            
-            # Optimizations - PRESERVED FROM ORIGINAL
-            if self.config.apply_system_optimizations or True:  # Prompt if not set via CLI
+            self.install_mumble()
+
+            # Performance tools
+            self.install_mangohud()
+            self.install_goverlay()
+
+            # GPU-specific utilities
+            self.install_greenwithenv()
+
+            # Visual enhancement
+            self.install_vkbasalt()
+            self.show_reshade_info()
+
+            # Mod management
+            self.install_mod_managers()
+
+            # System optimizations — CORRECTED: was `or True`
+            if self.config.apply_system_optimizations or (
+                interactive and self.confirm("Apply gaming system optimizations?")
+            ):
                 self.optimize_system()
-            
-            if self.config.create_performance_launcher or True:  # Prompt if not set via CLI
+
+            # Performance launcher — CORRECTED: was `or True`
+            if self.config.create_performance_launcher or (
+                interactive and self.confirm("Create performance launcher script?")
+            ):
                 self.create_performance_script()
-            
-            # Show what was installed - PRESERVED FROM ORIGINAL
+
+            # Post-install reporting
             self.show_installation_summary()
-            
-            # Set proper ownership on log file - PRESERVED FROM ORIGINAL
+
+            self.post_install_health_check()
+
+            # Set log file ownership
             try:
                 uid, gid = get_real_user_uid_gid()
                 if not self.config.dry_run:
                     os.chown(LOG_FILE, uid, gid)
-            except Exception as e:
+            except (OSError, PermissionError) as e:
                 logging.warning(f"Could not set ownership on log file: {e}")
-            
-            # Save state - ENHANCED
+
+            # Save state
             self.save_installation_state()
-            
-            # Completion - PRESERVED FROM ORIGINAL
+
+            # Final steps and reboot prompt
             self.final_steps()
-            
+
         except KeyboardInterrupt:
             print(f"\n{Color.YELLOW}Installation interrupted by user{Color.END}")
+            try:
+                self.save_installation_state()
+            except (IOError, OSError):
+                pass  # Best-effort state save during interrupt cleanup
             sys.exit(1)
         except Exception as e:
-            logging.error(f"Unexpected error: {e}")
-            print(f"{Color.RED}An error occurred. Check log file: {LOG_FILE}{Color.END}")
+            # This is the last-resort handler for the entire run() flow.
+            # All inner try/except blocks use specific exception types.
+            logging.error(f"Unexpected error: {e}", exc_info=True)
+            print(f"{Color.RED}An error occurred: {e}{Color.END}")
+            print(f"{Color.YELLOW}Check log file: {LOG_FILE}{Color.END}")
+            try:
+                self.save_installation_state()
+            except (IOError, OSError):
+                pass  # Best-effort state save during error cleanup
             sys.exit(1)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3310,32 +4919,41 @@ exit $EXIT_CODE
 def main():
     """
     Entry point for the script
-    
-    Handles argument parsing and script initialization
+
+    Handles argument parsing and script initialization.
+    Added --update, --self-update, --check-requirements dispatch.
     """
-    # Parse command-line arguments
     args = parse_arguments()
-    
-    # Handle special cases first
+
     if hasattr(args, 'cleanup') and args.cleanup:
         print(f"{Color.CYAN}Cleaning up installation files...{Color.END}")
-        # Cleanup logic here
         sys.exit(0)
-    
-    # Create setup instance
+
     setup = GamingSetup(args)
-    
-    # Handle rollback
+
     if hasattr(args, 'rollback') and args.rollback:
         setup.perform_rollback()
         sys.exit(0)
-    
-    # Run main installation
+
+    if hasattr(args, 'update') and args.update:
+        setup.detect_system()
+        setup.perform_update()
+        sys.exit(0)
+
+    if hasattr(args, 'self_update') and args.self_update:
+        setup.check_self_update()
+        sys.exit(0)
+
+    if hasattr(args, 'check_requirements') and args.check_requirements:
+        setup.detect_system()
+        setup.check_system_requirements()
+        sys.exit(0)
+
     setup.run()
 
 if __name__ == "__main__":
     main()
 
-# END OF PART 6 (FINAL)
-# This completes the comprehensive enhanced gaming setup script
-# All original functionality preserved with extensive new enhancements
+# ═══════════════════════════════════════════════════════════════════════════════
+# END OF debian_gaming_setup.py
+# ═══════════════════════════════════════════════════════════════════════════════
