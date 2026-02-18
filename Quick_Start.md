@@ -1,4 +1,4 @@
-# Quick Start Guide v2.1
+# Quick Start Guide v2.5
 
 **Get gaming on Linux in under 30 minutes**
 
@@ -10,10 +10,10 @@ This guide walks you through your first installation, from download to playing g
 
 ### Prerequisites Checklist
 
-- [ ] Debian-based Linux (Ubuntu 20.04+, Mint 20+, Debian 11+)
+- [ ] Debian-based Linux (Ubuntu 20.04+, Linux Mint 20+, Debian 11+, Pop!_OS, ElementaryOS, Zorin OS, Kali Linux)
 - [ ] Sudo/root access
 - [ ] Internet connection (stable)
-- [ ] 10GB+ free disk space
+- [ ] 10GB+ free disk space (5GB minimum)
 - [ ] Terminal access (Ctrl+Alt+T)
 
 ### Know Your Hardware
@@ -23,20 +23,33 @@ This guide walks you through your first installation, from download to playing g
 lspci | grep -i vga
 ```
 
-**Running in VM?** The script auto-detects VMware, VirtualBox, KVM, Hyper-V.
+**Running in VM?** The script auto-detects VMware, VirtualBox, KVM, Hyper-V, Xen, and Parallels.
+
+### Validate Your System ✨
+
+Before installing, you can verify your system meets all requirements:
+```bash
+sudo python3 debian_gaming_setup.py --check-requirements
+```
 
 ---
 
-## 🚀 Three Installation Paths
+## 🚀 Five Installation Paths
 
 ### Path A: Interactive (Recommended for Beginners)
 **Time:** 30-45 minutes | **Control:** Full | **Safety:** Highest
 
-### Path B: Automated (Experienced Users)
+### Path B: Preset (Fastest Setup) ✨
+**Time:** 15-20 minutes | **Control:** Curated bundles | **Safety:** High
+
+### Path C: Automated (Experienced Users)
 **Time:** 15-20 minutes | **Control:** Minimal | **Safety:** Test with dry-run first
 
-### Path C: Test First (Cautious Users)
+### Path D: Test First (Cautious Users)
 **Time:** 5 min test + 30 min install | **Control:** Full | **Safety:** Maximum
+
+### Path E: Targeted (Specific Components)
+**Time:** 5-15 minutes | **Control:** Precise | **Safety:** High
 
 ---
 
@@ -46,7 +59,7 @@ lspci | grep -i vga
 
 ```bash
 cd ~/Downloads
-wget https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/debian_gaming_setup.py
+wget https://raw.githubusercontent.com/Sandler73/Debian-Gaming-Setup-Project/main/debian_gaming_setup.py
 ```
 
 ### Step 2: Run
@@ -58,19 +71,22 @@ sudo python3 debian_gaming_setup.py
 ### Step 3: Follow Prompts
 
 The script will:
-1. **Detect your system** - Shows GPU, distribution, VM status
-2. **Update packages** - Updates system (5-10 minutes)
-3. **Detect hardware** - Identifies GPU vendor
-4. **Ask about drivers** - Install NVIDIA/AMD/Intel/VM tools?
-5. **Ask about platforms** - Install Steam, Lutris, etc?
-6. **Ask about tools** - Discord, OBS, controllers?
-7. **Show summary** - Display what was installed
-8. **Offer reboot** - Required for drivers
+1. **Validate system** — Checks disk space, RAM, architecture, dpkg lock ✨
+2. **Detect your system** — Shows GPU, distribution, VM status
+3. **Check network** — Verifies connectivity to package repositories ✨
+4. **Update packages** — Updates system (5-10 minutes)
+5. **Detect hardware** — Identifies GPU vendor dynamically ✨
+6. **Ask about drivers** — Install NVIDIA/AMD/Intel/VM tools?
+7. **Ask about platforms** — Install Steam, Lutris, etc?
+8. **Ask about tools** — Discord, OBS, controllers?
+9. **Run health check** — Verifies all installed components ✨
+10. **Show summary** — Display what was installed
+11. **Offer reboot** — Required for drivers
 
 **Example prompts you'll see:**
 
 ```
-✓ NVIDIA GPU detected
+✓ NVIDIA GPU detected (dynamically resolved)
 Install NVIDIA drivers? (y/n): y
 
 ✓ Steam already installed (version: 1.0.0.78)
@@ -91,7 +107,7 @@ Install Waydroid (Android container)? (y/n): n
 - **MangoHud:** `y` (FPS counter)
 - **SOBER:** `y` if you play Roblox
 - **Waydroid:** `y` if you want Android apps
-- **Optimizations:** `y` (desktop), `n` (laptop)
+- **Optimizations:** `y` (desktop), `n` (laptop — CPU governor drains battery)
 
 ### Step 4: Reboot
 
@@ -128,12 +144,63 @@ glxinfo | grep "OpenGL renderer"
 
 ---
 
-## ⚡ Path B: Automated Installation
+## ⚡ Path B: Preset Installation ✨
+
+Presets are curated component bundles — the fastest way to a working gaming setup.
+
+### Minimal (GPU + Steam Only)
+
+```bash
+wget https://raw.githubusercontent.com/Sandler73/Debian-Gaming-Setup-Project/main/debian_gaming_setup.py
+
+sudo python3 debian_gaming_setup.py --preset minimal -y
+sudo reboot
+```
+
+### Standard (Recommended for Most Users)
+
+```bash
+sudo python3 debian_gaming_setup.py --preset standard -y
+sudo reboot
+```
+
+**Includes:** GPU drivers, Steam, Lutris, Heroic, ProtonUp-Qt, Wine, GameMode, MangoHud, codecs, system optimizations, performance launcher
+
+### Complete (Everything)
+
+```bash
+sudo python3 debian_gaming_setup.py --preset complete -y
+sudo reboot
+```
+
+**Includes:** All platforms (including SOBER, Waydroid), all tools, all communication apps, all performance tools, mod managers, controllers
+
+### Streaming
+
+```bash
+sudo python3 debian_gaming_setup.py --preset streaming -y
+sudo reboot
+```
+
+**Includes:** Standard + OBS Studio, Discord, Mumble
+
+### Combine Presets with Flags
+
+Presets are non-destructive overlays — you can add extra components:
+
+```bash
+# Standard preset plus Waydroid and vkBasalt
+sudo python3 debian_gaming_setup.py --preset standard --waydroid --vkbasalt -y
+```
+
+---
+
+## ⚡ Path C: Automated Installation
 
 ### NVIDIA Gaming PC (Complete)
 
 ```bash
-wget https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/debian_gaming_setup.py
+wget https://raw.githubusercontent.com/Sandler73/Debian-Gaming-Setup-Project/main/debian_gaming_setup.py
 
 sudo python3 debian_gaming_setup.py -y \
     --nvidia \
@@ -227,12 +294,12 @@ sudo reboot
 
 ---
 
-## 🧪 Path C: Test First (Dry-Run)
+## 🧪 Path D: Test First (Dry-Run)
 
 ### Step 1: Test Installation
 
 ```bash
-wget https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/debian_gaming_setup.py
+wget https://raw.githubusercontent.com/Sandler73/Debian-Gaming-Setup-Project/main/debian_gaming_setup.py
 
 sudo python3 debian_gaming_setup.py --dry-run \
     --nvidia \
@@ -242,9 +309,9 @@ sudo python3 debian_gaming_setup.py --dry-run \
 
 **You'll see:**
 ```
-════════════════════════════════════════
+═══════════════════════════════════════════
 DRY RUN MODE - No changes will be made
-════════════════════════════════════════
+═══════════════════════════════════════════
 
 [DRY RUN] Would execute: apt-get update
 [DRY RUN] Would execute: apt-get upgrade -y
@@ -258,7 +325,7 @@ DRY RUN MODE - No changes will be made
 Look for:
 - ✓ Components that would be installed
 - ✓ Commands that would be executed
-- ⚠️ Any warnings or potential issues
+- ⚠ Any warnings or potential issues
 
 ### Step 3: Run For Real
 
@@ -270,6 +337,30 @@ sudo python3 debian_gaming_setup.py -y \
     --optimize
 
 sudo reboot
+```
+
+### Dry-Run with Presets ✨
+
+```bash
+# Preview what a preset would install
+sudo python3 debian_gaming_setup.py --preset complete --dry-run
+```
+
+---
+
+## 🎯 Path E: Targeted Installation
+
+Install only specific components without any prompts:
+
+```bash
+# Just Steam and GameMode
+sudo python3 debian_gaming_setup.py --steam --gamemode -y
+
+# Just Wine ecosystem
+sudo python3 debian_gaming_setup.py --wine --winetricks --dxvk --vkd3d -y
+
+# Just performance tools
+sudo python3 debian_gaming_setup.py --gamemode --mangohud --goverlay -y
 ```
 
 ---
@@ -298,8 +389,10 @@ ENABLE_VKBASALT=1 %command%
 ```
 
 **Configure MangoHud (Optional):**
+The installer creates a default config at `~/.config/MangoHud/MangoHud.conf` ✨
+
 ```bash
-mkdir -p ~/.config/MangoHud
+# Customize if desired
 nano ~/.config/MangoHud/MangoHud.conf
 ```
 
@@ -316,24 +409,32 @@ Enable for games:
 ```
 # Steam launch options:
 mangohud %command%
+
+# Combined with GameMode:
+gamemoderun mangohud %command%
 ```
 
 ### 2. Use Performance Launcher
 
+The script creates `~/launch-game.sh` with intelligent performance management ✨:
+
 ```bash
-# The script created this for you
 ~/launch-game.sh steam
 ~/launch-game.sh lutris
-
-# Or system-wide (if you chose that option)
-launch-game steam
+~/launch-game.sh wine /path/to/game.exe
 ```
 
 **What it does:**
-- ✓ Enables GameMode
-- ✓ Sets CPU to performance mode
-- ✓ Adjusts process priority
-- ✓ Restores settings after game exits
+- ✓ Sets CPU governor to performance (restores on exit)
+- ✓ Validates GameMode library before enabling (prevents multilib errors)
+- ✓ Activates MangoHud via MANGOHUD=1 env var (avoids LD_PRELOAD issues)
+- ✓ Steam-specific handling (skips wrapper, advises per-game Launch Options)
+- ✓ Cleanup trap restores all settings on exit
+
+**For Steam games**, configure per-game via Launch Options:
+```
+gamemoderun mangohud %command%
+```
 
 ### 3. Install Your First Game
 
@@ -380,6 +481,37 @@ mangohud %command%
 
 ---
 
+## 🔄 Maintenance ✨
+
+### Update Components
+
+```bash
+# Update all previously installed components
+sudo python3 debian_gaming_setup.py --update
+```
+
+Reads your installation state and checks APT packages, Flatpak apps, and GE-Proton for updates.
+
+### Rollback Installation
+
+```bash
+# Undo a previous installation
+sudo python3 debian_gaming_setup.py --rollback
+```
+
+The rollback engine tracks 7 action types (APT, Flatpak, repos, files, sysctl, GE-Proton) and reverses them in LIFO order with a dry-run preview option.
+
+### Check for Script Updates
+
+```bash
+# Check GitHub for newer version
+sudo python3 debian_gaming_setup.py --self-update
+```
+
+Downloads, validates syntax, backs up current version, and replaces atomically.
+
+---
+
 ## 🐛 Common First-Time Issues
 
 ### Issue: "Must be run with sudo"
@@ -389,6 +521,18 @@ mangohud %command%
 sudo python3 debian_gaming_setup.py
 ```
 Always use `sudo`.
+
+### Issue: "dpkg is locked" ✨
+
+**Solution:**
+```bash
+sudo lsof /var/lib/dpkg/lock-frontend  # Check what's using it
+# If safe, clear stale locks:
+sudo rm /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock
+sudo dpkg --configure -a
+```
+
+The script's system pre-check detects this automatically and warns you.
 
 ### Issue: Steam won't launch
 
@@ -450,6 +594,20 @@ sudo python3 debian_gaming_setup.py --amd
    prime-select query  # NVIDIA laptops
    ```
 
+### Issue: GameMode "cannot open shared object" ✨
+
+```bash
+sudo apt install libgamemode0 libgamemode0:i386
+```
+
+The performance launcher validates library presence via `ldconfig` before enabling GameMode.
+
+### Issue: MangoHud not showing ✨
+
+- The performance launcher uses `MANGOHUD=1` env var (Vulkan implicit layer)
+- For Steam per-game: set Launch Options to `mangohud %command%`
+- Check config: `~/.config/MangoHud/MangoHud.conf`
+
 ### Issue: Controller not detected
 
 **Check:**
@@ -489,6 +647,7 @@ After installation, verify:
 - [ ] At least one game installed
 - [ ] Game launches and runs
 - [ ] Performance overlay shows (if MangoHud installed)
+- [ ] Post-install health check passed ✨
 - [ ] Logs show no critical errors
 - [ ] Performance launcher works
 
@@ -507,24 +666,40 @@ grep ERROR ~/gaming_setup_logs/gaming_setup_*.log
 1. **ProtonDB** - Check game compatibility
    - https://www.protondb.com
    - Community fixes and tips
-   
+
 2. **Lutris** - Install non-Steam games
    - https://lutris.net/games
    - One-click installers
-   
+
 3. **MangoHud Configuration**
    - https://github.com/flightlessmango/MangoHud
    - Customize overlay
-   
+
 4. **GE-Proton** - Custom Proton builds
-   - Already installed by script
+   - Already installed by script (SHA512 verified) ✨
    - Select in game properties
+
+### Ongoing Maintenance ✨
+
+```bash
+# Update all components
+sudo python3 debian_gaming_setup.py --update
+
+# Check for script updates
+sudo python3 debian_gaming_setup.py --self-update
+
+# System maintenance
+sudo apt-get update && sudo apt-get upgrade
+flatpak update
+```
 
 ### Advanced Configuration
 
 See [Usage_Guide.md](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/Usage_Guide.md) for:
-- All CLI options explained
-- Advanced optimizations
+- All 54 CLI options explained
+- Configuration presets
+- Rollback system details
+- Update mode
 - Per-game configurations
 - Troubleshooting guide
 - Virtual machine tips
@@ -540,9 +715,12 @@ See [Usage_Guide.md](https://github.com/Sandler73/Debian-Gaming-Setup-Project/bl
    cat ~/gaming_setup_logs/gaming_setup_*.log
    ```
 
-2. **Search ProtonDB** for game-specific issues
+2. **Run health check** ✨:
+   The script runs a post-install health check automatically. Check the output for warnings.
 
-3. **Review documentation:**
+3. **Search ProtonDB** for game-specific issues
+
+4. **Review documentation:**
    - [README.md](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/README.md) - Overview
    - [Usage_Guide.md](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/Usage_Guide.md) - Complete reference
    - [CHANGELOG.md](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/CHANGELOG.md) - Recent changes
@@ -569,6 +747,13 @@ If you encounter problems:
 sudo python3 debian_gaming_setup.py              # Interactive
 sudo python3 debian_gaming_setup.py --dry-run    # Test
 sudo python3 debian_gaming_setup.py -y [OPTIONS] # Automated
+sudo python3 debian_gaming_setup.py --preset standard -y  # Preset ✨
+
+# Maintenance ✨
+sudo python3 debian_gaming_setup.py --update         # Update components
+sudo python3 debian_gaming_setup.py --rollback        # Undo installation
+sudo python3 debian_gaming_setup.py --self-update     # Update script
+sudo python3 debian_gaming_setup.py --check-requirements  # Validate system
 
 # Post-Installation
 nvidia-smi                           # Check NVIDIA driver
@@ -593,6 +778,7 @@ steam                                        # Run Steam from terminal
 - Drivers installed and working
 - Gaming platforms configured
 - Performance tools enabled
+- Rollback safety net in place ✨
 - Ready to play
 
 **Enjoy your games!**
@@ -601,4 +787,4 @@ steam                                        # Run Steam from terminal
 
 **Questions?** See [Usage_Guide.md](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/Usage_Guide.md) for detailed help.
 
-**Version:** 2.1.0 | Updated: January 2026
+**Version:** 2.5.0 | Updated: February 2026
