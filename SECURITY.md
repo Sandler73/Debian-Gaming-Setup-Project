@@ -4,11 +4,12 @@
 
 | Version | Supported          | Security Updates |
 | ------- | ------------------ | ---------------- |
-| 2.1.x   | :white_check_mark: | Yes              |
-| 2.0.x   | :white_check_mark: | Yes              |
+| 2.5.x   | :white_check_mark: | Yes (Current)    |
+| 2.2.x-2.4.x | :white_check_mark: | Yes         |
+| 2.0.x-2.1.x | :white_check_mark: | Yes         |
 | 1.x.x   | :x:                | No (Legacy)      |
 
-**Current Stable Version:** 2.1.0
+**Current Stable Version:** 2.5.0
 
 ---
 
@@ -16,7 +17,7 @@
 
 We take security seriously. If you discover a security vulnerability, please report it responsibly.
 
-### 📝 What to Include
+### 🔍 What to Include
 
 Please provide:
 1. **Description** of the vulnerability
@@ -43,26 +44,34 @@ This script requires `sudo` privileges to:
 - Modify system configurations
 - Install GPU drivers
 - Configure kernel parameters
+- Add and manage APT repositories
+- Write sysctl configuration files
 
 **We recommend:**
 - Review the script before running
 - Use `--dry-run` mode first
+- Use `--check-requirements` to validate your system ✨
 - Check logs for suspicious activity
+- Use `--rollback` if anything goes wrong ✨
 
-### 🔍 What the Script Accesses
+### 📂 What the Script Accesses
 
 **File System:**
 - `/etc/apt/` - Repository configuration
 - `/etc/sysctl.d/` - Kernel parameters
 - `/etc/sudoers.d/` - CPU governor permissions
-- `~/.config/` - User configurations
-- `~/.steam/` - Steam installation
+- `/tmp/` - Temporary download files (cleaned up after use)
+- `~/.config/` - User configurations (MangoHud, vkBasalt)
+- `~/.steam/` - Steam installation and GE-Proton
+- `~/gaming_setup_logs/` - Operation logs, state files, rollback manifest
+- `~/gaming_setup_backups/` - Pre-modification file backups
 
 **Network Access:**
 - Package repositories (APT)
 - Flathub (for Flatpak apps)
-- GitHub API (for GE-Proton)
+- GitHub API (for GE-Proton downloads and self-update)
 - WineHQ repository
+- Waydroid repository (waydro.id)
 - Official distribution repositories
 
 **No External Data Collection:**
@@ -70,21 +79,42 @@ This script requires `sudo` privileges to:
 - No analytics or tracking
 - No personal data transmitted
 - All operations are local
+- User-Agent header identifies as `debian-gaming-setup` only
 
 ### 🛡️ Security Features
 
-**Built-in Protections:**
+**v2.5.0 Security Hardening:** ✨
+
+- ✅ **No `shell=True` subprocess calls** — All commands use list-form arguments, preventing shell injection. The debconf EULA pipe uses `subprocess.run(input=)` instead of shell echo-pipe
+- ✅ **No bare `except` clauses** — Every try/except block catches specific exception types (`OSError`, `IOError`, `subprocess.SubprocessError`, `json.JSONDecodeError`, etc.). One documented outermost catch-all retained in `run()` as last-resort handler
+- ✅ **Categorized timeout constants** — 6 named timeouts (QUICK 5s, NETWORK 10s, API 15s, DOWNLOAD 120s, INSTALL 300s, UPDATE 600s) prevent hanging operations
+- ✅ **Secure external script execution** — Waydroid repository script downloaded to temp file, validated (shebang check to catch HTML error pages), then executed and cleaned up. No `curl | bash`
+- ✅ **Atomic file writes** — Rollback manifest written to temp file then `os.replace()` to prevent corruption on crash
+- ✅ **Signal handling** — SIGTERM/SIGINT handlers save installation state and rollback manifest before clean exit
+- ✅ **Post-install health check** — Verifies installed packages, binaries, Flatpak apps, and GPU drivers after installation
+
+**Core Protections (All Versions):**
+
 - ✅ No arbitrary code execution from user input
+- ✅ No `eval()` or `exec()` usage
 - ✅ Validates package sources before installation
 - ✅ Creates backups before modifications
 - ✅ Comprehensive logging of all operations
 - ✅ Sudo timeout for sensitive operations
 - ✅ Validates sudoers file syntax before applying
+- ✅ Input validation and sanitization
+- ✅ GE-Proton SHA512 checksum verification ✨
+- ✅ Wine repository URL validation via HTTP HEAD ✨
+- ✅ Network connectivity pre-check before remote operations ✨
+- ✅ System requirements pre-flight validation ✨
 
 **Verification:**
 - Package signatures verified by APT
 - Flatpak apps verified by Flathub
 - GitHub releases verified via HTTPS
+- GE-Proton tarballs verified via SHA512 checksums ✨
+- Self-update validates syntax via `py_compile` before replacing ✨
+- Downloaded scripts validated (shebang check) before execution ✨
 
 ---
 
@@ -93,12 +123,12 @@ This script requires `sudo` privileges to:
 ### 1. Third-Party Repositories
 
 The script adds the following repositories:
-- **WineHQ** - wine.org official repository
-- **OBS Studio PPA** - Launchpad PPA
-- **Waydroid** - waydro.id official repository
+- **WineHQ** - wine.org official repository (URL validated before adding) ✨
+- **Waydroid** - waydro.id official repository (script validated before executing) ✨
+- **Flathub** - Flatpak application repository
 
-**Risk:** Compromised repositories could serve malicious packages  
-**Mitigation:** Only uses official, well-known repositories
+**Risk:** Compromised repositories could serve malicious packages
+**Mitigation:** Only uses official, well-known repositories; validates URLs before adding; secure download-then-execute for Waydroid
 
 ### 2. Flatpak Applications
 
@@ -107,25 +137,40 @@ Flatpak apps run in sandboxes but may request permissions:
 - Network access
 - Device access (GPU, audio)
 
-**Risk:** Malicious Flatpak app could abuse permissions  
-**Mitigation:** Only installs from Flathub (verified apps)
+**Risk:** Malicious Flatpak app could abuse permissions
+**Mitigation:** Only installs from Flathub (verified apps); Flatpak setup deduplicated through `ensure_flatpak_ready()` with session caching
 
 ### 3. GitHub Downloads
 
-GE-Proton is downloaded from GitHub releases.
+GE-Proton is downloaded from GitHub releases. Self-update downloads from GitHub.
 
-**Risk:** Man-in-the-middle attack or compromised GitHub account  
-**Mitigation:** Downloaded via HTTPS, GitHub's security measures
+**Risk:** Man-in-the-middle attack or compromised GitHub account
+**Mitigation:**
+- Downloaded via HTTPS, GitHub's security measures
+- GE-Proton: SHA512 checksum verification against published `.sha512sum` file ✨
+- Self-update: Syntax validation via `py_compile` before replacing running script ✨
+- Self-update: Current version backed up as `.v{version}.backup` before replacement ✨
 
 ### 4. Sudo Configuration
 
 Script can configure passwordless sudo for CPU frequency control.
 
-**Risk:** Could be abused if user account is compromised  
-**Mitigation:** 
+**Risk:** Could be abused if user account is compromised
+**Mitigation:**
 - Only allows specific commands (`cpupower`, `cpufreq-set`)
 - Validates sudoers syntax before applying
 - User is prompted for confirmation
+
+### 5. Root Execution Model
+
+The entire script runs as root.
+
+**Risk:** Any bug could affect system-wide
+**Mitigation:**
+- Files in user home directories are `chown`ed to the real user (resolved from `$SUDO_USER`)
+- Signal handlers save state before exit ✨
+- Rollback engine can undo all changes ✨
+- Dry-run mode for safe testing
 
 ---
 
@@ -135,22 +180,26 @@ Script can configure passwordless sudo for CPU frequency control.
 
 1. ✅ **Review the script** - Read the code to understand what it does
 2. ✅ **Use dry-run mode** - Test with `--dry-run` flag first
-3. ✅ **Backup your data** - Create system backup before major changes
-4. ✅ **Check source** - Download from official repository only
-5. ✅ **Verify integrity** - Check file hash if provided
+3. ✅ **Validate system** - Run `--check-requirements` first ✨
+4. ✅ **Backup your data** - Create system backup before major changes
+5. ✅ **Check source** - Download from official repository only
+6. ✅ **Verify integrity** - Check file hash if provided
 
 ### During Installation
 
 1. ✅ **Monitor output** - Watch for unexpected behavior
 2. ✅ **Check logs** - Review `~/gaming_setup_logs/` for issues
 3. ✅ **Don't interrupt** - Let the script complete to avoid partial installs
+4. ✅ **Signal safety** - If you must interrupt, use Ctrl+C (state will be saved) ✨
 
 ### After Installation
 
-1. ✅ **Review logs** - Check for warnings or errors
-2. ✅ **Verify packages** - Confirm installed packages are legitimate
-3. ✅ **Test in isolation** - Try one feature at a time initially
-4. ✅ **Report issues** - Notify us of any suspicious behavior
+1. ✅ **Review health check** - Check the post-install verification output ✨
+2. ✅ **Review logs** - Check for warnings or errors
+3. ✅ **Verify packages** - Confirm installed packages are legitimate
+4. ✅ **Test in isolation** - Try one feature at a time initially
+5. ✅ **Report issues** - Notify us of any suspicious behavior
+6. ✅ **Know your rollback** - `--rollback` can undo the entire installation ✨
 
 ---
 
@@ -181,8 +230,10 @@ Script can configure passwordless sudo for CPU frequency control.
 - Download from official repository only
 - Verify script before running
 - Use `--dry-run` to test
+- Use `--check-requirements` to validate ✨
 - Keep your system updated
 - Review logs regularly
+- Use `--rollback` if something goes wrong ✨
 - Report suspicious behavior
 
 **❌ DON'T:**
@@ -191,6 +242,7 @@ Script can configure passwordless sudo for CPU frequency control.
 - Ignore warning messages
 - Run as root unnecessarily (use sudo)
 - Disable security features
+- Ignore the post-install health check output ✨
 
 ### Environment-Specific Considerations
 
@@ -198,7 +250,7 @@ Script can configure passwordless sudo for CPU frequency control.
 - Test on non-production system first
 - Use `--dry-run` mode
 - Schedule during maintenance windows
-- Have rollback plan ready
+- Have rollback plan ready (`--rollback` available) ✨
 
 **Development Systems:**
 - Still use caution with root access
@@ -218,9 +270,10 @@ Script can configure passwordless sudo for CPU frequency control.
 
 All packages come from trusted sources:
 - **Ubuntu/Debian repositories** - Official, signed packages
-- **Launchpad PPAs** - Community repositories (verified)
+- **WineHQ** - Official repository (URL validated before adding) ✨
 - **Flathub** - Verified Flatpak applications
-- **GitHub Releases** - HTTPS, official project accounts
+- **GitHub Releases** - HTTPS, GE-Proton with SHA512 verification ✨
+- **Waydroid** - Official repository (script validated before executing) ✨
 
 ### Known Vulnerabilities
 
@@ -238,13 +291,14 @@ We monitor:
 
 ### If You Suspect Compromise
 
-1. **Stop the script** immediately (Ctrl+C)
+1. **Stop the script** immediately (Ctrl+C — state will be saved) ✨
 2. **Disconnect from network** (if actively compromised)
 3. **Preserve evidence** - Don't delete logs
 4. **Review logs** - Check `~/gaming_setup_logs/`
-5. **Report to us**
-6. **System scan** - Run antivirus/malware scan
-7. **Change passwords** - If credentials may be compromised
+5. **Use rollback** - `sudo python3 debian_gaming_setup.py --rollback` ✨
+6. **Report to us**
+7. **System scan** - Run antivirus/malware scan
+8. **Change passwords** - If credentials may be compromised
 
 ### What We'll Do
 
@@ -265,13 +319,19 @@ You can verify security by checking:
 
 - [ ] Script source code is readable
 - [ ] No obfuscated code
+- [ ] No `shell=True` in subprocess calls ✨
+- [ ] No bare `except` clauses (except documented outermost handler) ✨
+- [ ] No `eval()` or `exec()` usage
 - [ ] No network calls except to known repositories
 - [ ] No data exfiltration
-- [ ] Proper error handling
+- [ ] Proper error handling with specific exception types ✨
 - [ ] Input validation present
 - [ ] Sudo usage is minimal and specific
 - [ ] Backups created before changes
 - [ ] Comprehensive logging enabled
+- [ ] Timeout constants used for all operations ✨
+- [ ] Signal handlers save state on interruption ✨
+- [ ] Checksum verification for downloaded files ✨
 
 ### Professional Audit
 
@@ -280,6 +340,19 @@ We welcome security researchers to:
 - Perform penetration testing
 - Suggest improvements
 - Report findings responsibly
+
+---
+
+## Security Changelog ✨
+
+| Version | Security Change |
+|---------|----------------|
+| 2.5.0 | Eliminated all shell=True, fixed bare except clauses, signal handlers, secure Waydroid install, categorized timeouts, Flatpak deduplication |
+| 2.4.0 | Self-update syntax validation via py_compile, atomic script replacement |
+| 2.3.0 | Atomic manifest writes (os.replace), GE-Proton SHA512 checksum verification |
+| 2.2.0 | Wine URL validation before repo addition, network connectivity pre-check, package availability validation |
+| 2.1.0 | Version-aware MangoHud installation, repository cleanup improvements |
+| 2.0.0 | Input validation, structured logging, state management |
 
 ---
 
@@ -300,6 +373,7 @@ We follow responsible disclosure practices:
 - Code injection possibilities
 - Authentication/authorization bypasses
 - Data exposure issues
+- Unsafe subprocess execution patterns
 
 **Out of Scope:**
 - Vulnerabilities in dependencies (report to upstream)
@@ -313,7 +387,7 @@ We follow responsible disclosure practices:
 
 **General Issues:** [Issues](https://github.com/Sandler73/Debian-Gaming-Setup-Project/issues)
 
-**GPG Key:** Available on request  
+**GPG Key:** Available on request
 
 **Response Times:**
 - Critical: 24 hours
@@ -326,9 +400,9 @@ We follow responsible disclosure practices:
 
 This security policy is reviewed quarterly and updated as needed.
 
-**Last Updated:** January 2026  
-**Next Review:** April 2026  
-**Version:** 2.1.0
+**Last Updated:** February 2026
+**Next Review:** May 2026
+**Version:** 2.5.0
 
 ---
 
