@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.6.0] - 2026-02-19
+
+### Added ✨
+- **Pre-install detection for 7 methods** — `install_vm_tools()`, `_install_ge_proton()`, `install_mangohud()`, `install_goverlay()`, `install_vkbasalt()`, `install_mumble()`, and `install_mod_managers()` now check for existing installations before prompting, reporting version info and offering reinstall/skip
+- **VM tools version detection** — Per-VM-type binary checks (`vmware-toolbox-cmd -v`, `VBoxClient`, `qemu-guest-agent`, etc.) with version reporting
+- **GE-Proton version comparison** — Scans `~/.steam/root/compatibilitytools.d/` for existing versions, compares with latest GitHub release, skips download if already up to date
+- **Flatpak-aware command resolver in launch_game.sh** — `resolve_command()` function maps known app names (lutris, heroic, discord) to their Flatpak run commands when native binaries aren't found
+- **launch_game.sh `--help` / `-h` flag** — Comprehensive inline usage documentation with supported launchers, examples, and enhancement descriptions
+- **LAUNCHER_GUIDE.md** — Standalone documentation for the performance launcher covering all features, Flatpak resolution, Steam per-game config, environment variables, and troubleshooting
+- **FAQ.md** — Comprehensive standalone FAQ with 50+ entries across 12 categories (General, Installation, GPU/Drivers, Gaming Platforms, Performance, Compatibility, Maintenance, Troubleshooting, Waydroid, Advanced, Security, Contributing)
+
+### Fixed 🐛
+- **Lutris URI error** (`[''] is not a valid URI`) — Empty arguments no longer passed to Flatpak apps; conditional array expansion prevents URI parsing failures
+- **Heroic Games Launcher "command not found"** — Flatpak resolution maps `heroic` to `flatpak run com.heroicgameslauncher.hgl`
+- **launch_game.sh `LAUNCH_CMD` array handling** — Resolved commands split into proper arrays via `read -ra` for correct `exec` behavior with multi-word Flatpak commands
+- **Hallucinated vkBasalt GitHub URL** — `DadSchoworseorse` corrected to `DadSchoorse` (verified)
+
+### Changed 🔄
+- **launch_game.sh rewritten** — Now 239 lines (was 170); includes Flatpak resolver, `--help` flag, improved argument handling, `RESOLVED_CMD`/`LAUNCH_CMD` split
+- **Pre-install check consistency** — All installation methods now follow the same detection pattern, aligning with existing `prompt_install_or_update()` behavior used by Steam, Lutris, Heroic, Wine, Discord, OBS, SOBER, Waydroid, and GWE
+
+---
+
 ## [2.5.0] - 2026-02-17
 
 ### Security 🔒
