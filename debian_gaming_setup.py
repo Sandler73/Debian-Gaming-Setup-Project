@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ═══════════════════════════════════════════════════════════════════════════════
-Debian-Based Comprehensive Gaming Setup Script v2.5.0
+Debian-Based Comprehensive Gaming Setup Script v2.6.0
 ═══════════════════════════════════════════════════════════════════════════════
 
 SYNOPSIS:
@@ -111,7 +111,7 @@ NOTES:
     • Rollback manifest persists across script restarts
 
 VERSION:
-    2.5.0
+    2.6.0
 
 AUTHOR:
     Debian Gaming Setup Script
@@ -209,7 +209,7 @@ STATE_FILE = LOG_DIR / "installation_state.json"
 ROLLBACK_FILE = LOG_DIR / "rollback_manifest.json"
 
 # Script version constant for self-update checks
-SCRIPT_VERSION = "2.5.0"
+SCRIPT_VERSION = "2.6.0"
 
 # Rollback manifest schema version
 ROLLBACK_SCHEMA_VERSION = "1.0"
@@ -2970,14 +2970,63 @@ class GamingSetup:
         """
         Install VM guest tools with distro-aware package availability checking.
 
+        Pre-install detection checks for existing guest tools before prompting.
         Package availability verification before install.
         Supports VMware, VirtualBox, KVM/QEMU, Hyper-V, Xen, and Parallels.
         """
         self.banner("VM GUEST TOOLS INSTALLATION")
 
-        print(f"{Color.CYAN}Detected {vm_type} — Installing guest tools...{Color.END}")
-
+        # --- Pre-install detection: check if VM tools are already present ---
         vm_lower = vm_type.lower()
+        existing_version = None
+        existing_tool = None
+
+        if 'vmware' in vm_lower:
+            if shutil.which("vmware-toolbox-cmd"):
+                success, stdout, _ = self.run_command(
+                    ["vmware-toolbox-cmd", "-v"],
+                    "Checking VMware Tools version", check=False
+                )
+                if success and stdout.strip():
+                    existing_version = stdout.strip()
+                    existing_tool = "VMware Tools"
+            elif self.is_package_installed("open-vm-tools"):
+                existing_version = self.get_package_version("open-vm-tools")
+                existing_tool = "open-vm-tools"
+
+        elif 'virtualbox' in vm_lower:
+            if self.is_package_installed("virtualbox-guest-utils"):
+                existing_version = self.get_package_version("virtualbox-guest-utils")
+                existing_tool = "VirtualBox Guest Utils"
+            elif shutil.which("VBoxClient"):
+                existing_tool = "VirtualBox Guest Additions"
+
+        elif 'kvm' in vm_lower or 'qemu' in vm_lower:
+            if self.is_package_installed("qemu-guest-agent"):
+                existing_version = self.get_package_version("qemu-guest-agent")
+                existing_tool = "QEMU Guest Agent"
+
+        elif 'hyper-v' in vm_lower or 'microsoft' in vm_lower:
+            if self.is_package_installed("hyperv-daemons"):
+                existing_version = self.get_package_version("hyperv-daemons")
+                existing_tool = "Hyper-V Daemons"
+
+        elif 'xen' in vm_lower:
+            if self.is_package_installed("xe-guest-utilities"):
+                existing_version = self.get_package_version("xe-guest-utilities")
+                existing_tool = "Xen Guest Utilities"
+
+        # Report existing installation and offer reinstall
+        if existing_tool:
+            if existing_version:
+                print(f"{Color.GREEN}✓ {existing_tool} already installed "
+                      f"(v{existing_version}){Color.END}")
+            else:
+                print(f"{Color.GREEN}✓ {existing_tool} already installed{Color.END}")
+            if not self.confirm(f"Reinstall {vm_type} guest tools?"):
+                return
+        else:
+            print(f"{Color.CYAN}Detected {vm_type} — Installing guest tools...{Color.END}")
 
         if 'vmware' in vm_lower:
             self._install_vm_packages("VMware",
@@ -3397,11 +3446,28 @@ class GamingSetup:
         """
         Install GE-Proton from GitHub with SHA512 checksum verification.
 
+        Pre-install detection scans compatibilitytools.d for existing versions.
         Downloads and verifies sha512sum.
         Records rollback action.
         Downloads latest release, verifies SHA512 checksum, and extracts.
         """
         self.banner("GE-PROTON INSTALLATION")
+
+        # --- Pre-install detection: check for existing GE-Proton versions ---
+        compat_dir = REAL_USER_HOME / ".steam" / "root" / "compatibilitytools.d"
+        existing_versions = []
+        if compat_dir.exists():
+            existing_versions = sorted(
+                [d.name for d in compat_dir.iterdir()
+                 if d.is_dir() and 'GE-Proton' in d.name],
+                reverse=True
+            )
+        if existing_versions:
+            print(f"{Color.GREEN}✓ GE-Proton already installed:{Color.END}")
+            for ver in existing_versions[:5]:
+                print(f"  • {ver}")
+            if len(existing_versions) > 5:
+                print(f"  ... and {len(existing_versions) - 5} more")
 
         print(f"{Color.CYAN}Fetching latest GE-Proton release...{Color.END}")
 
@@ -3415,6 +3481,12 @@ class GamingSetup:
 
             tag_name = data.get('tag_name', '')
             print(f"{Color.CYAN}Latest GE-Proton: {tag_name}{Color.END}")
+
+            # Compare with installed versions — skip if already up to date
+            if existing_versions and tag_name and tag_name in existing_versions:
+                print(f"{Color.GREEN}✓ {tag_name} is already installed{Color.END}")
+                if not self.confirm("Download and reinstall anyway?"):
+                    return
 
             # Find tar.gz and sha512sum assets
             download_url = None
@@ -3730,9 +3802,19 @@ class GamingSetup:
                 self.run_command(cmd, desc)
 
     def install_mumble(self):
-        """Install Mumble voice chat"""
-        if not (self.config.install_mumble or self.confirm("Install Mumble (voice chat)?")):
-            return
+        """Install Mumble voice chat with pre-install detection."""
+        # --- Pre-install detection ---
+        if self.is_package_installed("mumble"):
+            version = self.get_package_version("mumble")
+            print(f"{Color.GREEN}✓ Mumble already installed "
+                  f"(v{version}){Color.END}")
+            if not (self.config.install_mumble or
+                    self.confirm("Reinstall Mumble?")):
+                return
+        else:
+            if not (self.config.install_mumble or
+                    self.confirm("Install Mumble (voice chat)?")):
+                return
         self.run_command(["apt-get", "install", "-y", "mumble"], "Installing Mumble")
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -3741,8 +3823,29 @@ class GamingSetup:
 
     def install_mangohud(self):
         """Install MangoHud performance overlay with version-aware logic."""
-        if not (self.config.install_mangohud or self.confirm("Install MangoHud (performance overlay)?")):
-            return
+        # --- Pre-install detection ---
+        mangohud_installed = False
+        mangohud_version = None
+
+        if self.is_package_installed("mangohud"):
+            mangohud_installed = True
+            mangohud_version = self.get_package_version("mangohud")
+        elif shutil.which("mangohud"):
+            mangohud_installed = True
+
+        if mangohud_installed:
+            if mangohud_version:
+                print(f"{Color.GREEN}✓ MangoHud already installed "
+                      f"(v{mangohud_version}){Color.END}")
+            else:
+                print(f"{Color.GREEN}✓ MangoHud already installed{Color.END}")
+            if not (self.config.install_mangohud or
+                    self.confirm("Reinstall MangoHud?")):
+                return
+        else:
+            if not (self.config.install_mangohud or
+                    self.confirm("Install MangoHud (performance overlay)?")):
+                return
 
         self.banner("MANGOHUD INSTALLATION")
 
@@ -3797,9 +3900,24 @@ class GamingSetup:
             print(f"{Color.CYAN}  Manual: https://github.com/flightlessmango/MangoHud{Color.END}")
 
     def install_goverlay(self):
-        """Install Goverlay (MangoHud GUI)"""
-        if not (self.config.install_goverlay or self.confirm("Install Goverlay (MangoHud GUI)?")):
-            return
+        """Install Goverlay (MangoHud GUI) with pre-install detection."""
+        # --- Pre-install detection ---
+        if self.is_package_installed("goverlay"):
+            version = self.get_package_version("goverlay")
+            print(f"{Color.GREEN}✓ Goverlay already installed "
+                  f"(v{version}){Color.END}")
+            if not (self.config.install_goverlay or
+                    self.confirm("Reinstall Goverlay?")):
+                return
+        elif self.is_flatpak_installed("io.github.benjamimgois.goverlay"):
+            print(f"{Color.GREEN}✓ Goverlay already installed (Flatpak){Color.END}")
+            if not (self.config.install_goverlay or
+                    self.confirm("Reinstall Goverlay?")):
+                return
+        else:
+            if not (self.config.install_goverlay or
+                    self.confirm("Install Goverlay (MangoHud GUI)?")):
+                return
         self.run_command(["apt-get", "install", "-y", "goverlay"], "Installing Goverlay", check=False)
 
     def install_greenwithenv(self):
@@ -3832,11 +3950,32 @@ class GamingSetup:
             print(f"{Color.CYAN}  Manual: https://gitlab.com/leinardi/gwe{Color.END}")
 
     def install_vkbasalt(self):
-        """Install vkBasalt (Vulkan post-processing) - """
-        should_install = self.config.install_vkbasalt or \
-                        self.confirm("Install vkBasalt (Vulkan post-processing)?")
-        if not should_install:
-            return
+        """Install vkBasalt (Vulkan post-processing) with pre-install detection."""
+        # --- Pre-install detection ---
+        vkbasalt_installed = False
+        vkbasalt_version = None
+
+        if self.is_package_installed("vkbasalt"):
+            vkbasalt_installed = True
+            vkbasalt_version = self.get_package_version("vkbasalt")
+        elif Path("/usr/share/vulkan/implicit_layer.d/vkBasalt.json").exists():
+            vkbasalt_installed = True
+
+        if vkbasalt_installed:
+            if vkbasalt_version:
+                print(f"{Color.GREEN}✓ vkBasalt already installed "
+                      f"(v{vkbasalt_version}){Color.END}")
+            else:
+                print(f"{Color.GREEN}✓ vkBasalt already installed{Color.END}")
+            should_reinstall = self.config.install_vkbasalt or \
+                              self.confirm("Reinstall vkBasalt?")
+            if not should_reinstall:
+                return
+        else:
+            should_install = self.config.install_vkbasalt or \
+                            self.confirm("Install vkBasalt (Vulkan post-processing)?")
+            if not should_install:
+                return
 
         self.banner("VKBASALT INSTALLATION")
 
@@ -3847,7 +3986,7 @@ class GamingSetup:
 
         if not success:
             print(f"{Color.YELLOW}⚠ vkBasalt not in repos{Color.END}")
-            print(f"{Color.CYAN}  Manual: https://github.com/DadSchoworseorse/vkBasalt{Color.END}")
+            print(f"{Color.CYAN}  Manual: https://github.com/DadSchoorse/vkBasalt{Color.END}")
             return
 
         # Create default config
@@ -3914,7 +4053,7 @@ casSharpness = 0.4
             self.install_vkbasalt()
 
     def install_mod_managers(self):
-        """Install mod management tools - """
+        """Install mod management tools with pre-install detection."""
         should_install = self.config.install_mod_managers or \
                         self.confirm("Install mod management tools?")
         if not should_install:
@@ -3935,7 +4074,18 @@ casSharpness = 0.4
             print(f"  1. Download from https://www.nexusmods.com/about/vortex/")
             print(f"  2. Run through Proton/Wine\n")
 
-        if self.confirm("Install r2modman?"):
+        # --- r2modman pre-install detection ---
+        r2modman_installed = self.is_flatpak_installed("com.thunderstore.r2modman")
+        if r2modman_installed:
+            version = self.get_flatpak_version("com.thunderstore.r2modman")
+            if version:
+                print(f"{Color.GREEN}✓ r2modman already installed "
+                      f"(v{version}){Color.END}")
+            else:
+                print(f"{Color.GREEN}✓ r2modman already installed (Flatpak){Color.END}")
+            if not self.confirm("Reinstall r2modman?"):
+                return
+        elif self.confirm("Install r2modman?"):
             print(f"{Color.CYAN}Installing r2modman via Flatpak...{Color.END}")
             if not self.ensure_flatpak_ready():
                 return
@@ -4079,20 +4229,87 @@ CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 echo -e "${BOLD}=== Gaming Performance Mode ===${NC}"
 
 # ── Validate arguments ────────────────────────────────────────────
-if [ $# -eq 0 ]; then
-    echo -e "${YELLOW}Usage: $0 <game-command> [args...]${NC}"
-    echo -e "  Examples:"
-    echo -e "    $0 steam"
-    echo -e "    $0 lutris"
-    echo -e "    $0 wine /path/to/game.exe"
-    echo -e "    $0 gamescope -- mangohud %command%"
-    exit 1
+if [ $# -eq 0 ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    echo -e "${BOLD}Gaming Performance Launcher${NC}"
+    echo -e "  Wraps game launches with CPU governor, GameMode, and MangoHud."
+    echo ""
+    echo -e "${YELLOW}Usage:${NC} $0 <game-command> [args...]"
+    echo ""
+    echo -e "${BOLD}Supported Launchers:${NC}"
+    echo -e "  $0 steam              Launch Steam client"
+    echo -e "  $0 lutris             Launch Lutris (auto-resolves Flatpak)"
+    echo -e "  $0 heroic             Launch Heroic Games Launcher (auto-resolves Flatpak)"
+    echo -e "  $0 discord            Launch Discord (auto-resolves Flatpak)"
+    echo ""
+    echo -e "${BOLD}Direct Game Launch:${NC}"
+    echo -e "  $0 wine /path/to/game.exe      Windows game via Wine"
+    echo -e "  $0 /path/to/native-game        Native Linux game"
+    echo -e "  $0 gamescope -- %command%       Via Gamescope"
+    echo ""
+    echo -e "${BOLD}Enhancements Applied:${NC}"
+    echo -e "  • CPU governor → performance (restored on exit)"
+    echo -e "  • GameMode via gamemoderun (if installed + validated)"
+    echo -e "  • MangoHud via MANGOHUD=1 env var (Shift+F12 to toggle)"
+    echo ""
+    echo -e "${BOLD}Steam Per-Game Config:${NC}"
+    echo -e "  Right-click game → Properties → Launch Options:"
+    echo -e "    ${CYAN}gamemoderun mangohud %command%${NC}"
+    echo ""
+    echo -e "See: ~/LAUNCHER_GUIDE.md for full documentation"
+    exit 0
 fi
 
 GAME_CMD="$1"
 shift
 GAME_ARGS=("$@")
 CLEANUP_TASKS=()
+
+# ── Flatpak-aware command resolver ────────────────────────────────
+# Resolves known app names to their Flatpak launch commands when the
+# app was installed via Flatpak rather than native packages. Prevents
+# "command not found" and URI errors (e.g., Lutris interpreting empty
+# args as an invalid URI).
+resolve_command() {
+    local cmd="$1"
+    case "$cmd" in
+        lutris)
+            if command -v lutris &>/dev/null; then
+                echo "lutris"
+            elif flatpak list --app 2>/dev/null | grep -q "net.lutris.Lutris"; then
+                echo "flatpak run net.lutris.Lutris"
+            else
+                echo "$cmd"
+            fi
+            ;;
+        heroic|heroic-games-launcher)
+            if command -v heroic &>/dev/null; then
+                echo "heroic"
+            elif flatpak list --app 2>/dev/null | grep -q "com.heroicgameslauncher.hgl"; then
+                echo "flatpak run com.heroicgameslauncher.hgl"
+            else
+                echo "$cmd"
+            fi
+            ;;
+        discord)
+            if command -v discord &>/dev/null; then
+                echo "discord"
+            elif flatpak list --app 2>/dev/null | grep -q "com.discordapp.Discord"; then
+                echo "flatpak run com.discordapp.Discord"
+            else
+                echo "$cmd"
+            fi
+            ;;
+        *)
+            echo "$cmd"
+            ;;
+    esac
+}
+
+# Resolve the command (may expand to "flatpak run <app-id>")
+RESOLVED_CMD=$(resolve_command "$GAME_CMD")
+if [ "$RESOLVED_CMD" != "$GAME_CMD" ]; then
+    echo -e "  ${CYAN}Resolved:${NC} $GAME_CMD → $RESOLVED_CMD"
+fi
 
 # ── Cleanup handler ───────────────────────────────────────────────
 cleanup() {
@@ -4194,19 +4411,35 @@ case "$(basename "$GAME_CMD")" in
 esac
 
 # ── Launch ────────────────────────────────────────────────────────
-echo -e "\n${BOLD}Launching:${NC} $GAME_CMD ${GAME_ARGS[*]:-}"
+echo -e "\n${BOLD}Launching:${NC} $RESOLVED_CMD ${GAME_ARGS[*]:-}"
 echo "══════════════════════════════════════════════"
+
+# Split RESOLVED_CMD into array for proper exec handling
+# (e.g., "flatpak run net.lutris.Lutris" becomes 3 separate args)
+read -ra LAUNCH_CMD <<< "$RESOLVED_CMD"
 
 if $IS_STEAM; then
     # Launch Steam without gamemoderun wrapper to avoid multilib LD_PRELOAD
     # MANGOHUD=1 env var is already set and will be inherited
-    exec "$GAME_CMD" "${GAME_ARGS[@]:-}"
+    if [ ${#GAME_ARGS[@]} -gt 0 ]; then
+        exec "${LAUNCH_CMD[@]}" "${GAME_ARGS[@]}"
+    else
+        exec "${LAUNCH_CMD[@]}"
+    fi
 else
     # Non-Steam games: safe to wrap with gamemoderun since we validated the lib
     if $USE_GAMEMODE; then
-        exec gamemoderun "$GAME_CMD" "${GAME_ARGS[@]:-}"
+        if [ ${#GAME_ARGS[@]} -gt 0 ]; then
+            exec gamemoderun "${LAUNCH_CMD[@]}" "${GAME_ARGS[@]}"
+        else
+            exec gamemoderun "${LAUNCH_CMD[@]}"
+        fi
     else
-        exec "$GAME_CMD" "${GAME_ARGS[@]:-}"
+        if [ ${#GAME_ARGS[@]} -gt 0 ]; then
+            exec "${LAUNCH_CMD[@]}" "${GAME_ARGS[@]}"
+        else
+            exec "${LAUNCH_CMD[@]}"
+        fi
     fi
 fi
 '''
@@ -4767,7 +5000,7 @@ fi
                   network connectivity check, removed 'or True' patterns
         """
         self.banner("DEBIAN GAMING SETUP")
-        print(f"{Color.BOLD}Version {SCRIPT_VERSION} — Gaming Environment for Debian{Color.END}\n")
+        print(f"{Color.BOLD}Version {SCRIPT_VERSION} — Comprehensive Gaming Environment{Color.END}\n")
 
         if self.config.dry_run:
             print(f"{Color.YELLOW}{'='*60}{Color.END}")
