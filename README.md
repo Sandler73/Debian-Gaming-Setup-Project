@@ -1,4 +1,4 @@
-# Debian-Based Gaming Setup Script v2.5
+# Debian-Based Gaming Setup Script v2.6
 
 **A comprehensive automated gaming environment setup for Debian-based Linux distributions**
 
@@ -8,6 +8,18 @@
 [![Maintained](https://img.shields.io/badge/Maintained-Yes-green.svg)](https://github.com/Sandler73/Debian-Gaming-Setup-Project)
 
 Transform your Debian-based Linux system into a complete gaming powerhouse with a single command. This script automates the installation and configuration of GPU drivers, gaming platforms, compatibility layers, performance tools, and system optimizations with both interactive and automated modes.
+
+---
+
+## 🌟 What's New in v2.6
+
+- ✨ **Pre-install detection for 7 methods** — `install_vm_tools()`, `_install_ge_proton()`, `install_mangohud()`, `install_goverlay()`, `install_vkbasalt()`, `install_mumble()`, and `install_mod_managers()` now check for existing installations before prompting, reporting version info and offering reinstall/skip
+- ✨ **VM tools version detection** — Per-VM-type binary checks (`vmware-toolbox-cmd -v`, `VBoxClient`, `qemu-guest-agent`, etc.) with version reporting
+- ✨ **GE-Proton version comparison** — Scans `~/.steam/root/compatibilitytools.d/` for existing versions, compares with latest GitHub release, skips download if already up to date
+- ✨ **Flatpak-aware command resolver in launch_game.sh** — `resolve_command()` function maps known app names (lutris, heroic, discord) to their Flatpak run commands when native binaries aren't found
+- ✨ **launch_game.sh `--help` / `-h` flag** — Comprehensive inline usage documentation with supported launchers, examples, and enhancement descriptions
+- ✨ **LAUNCHER_GUIDE.md** — Standalone documentation for the performance launcher covering all features, Flatpak resolution, Steam per-game config, environment variables, and troubleshooting
+- ✨ **FAQ.md** — Comprehensive standalone FAQ with 50+ entries across 12 categories (General, Installation, GPU/Drivers, Gaming Platforms, Performance, Compatibility, Maintenance, Troubleshooting, Waydroid, Advanced, Security, Contributing)
 
 ---
 
