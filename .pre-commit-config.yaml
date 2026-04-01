@@ -1,0 +1,93 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Debian Gaming Setup Script — Pre-commit Hooks Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# SYNOPSIS:
+#   Pre-commit hook configuration for automated code quality gates.
+#
+# USAGE:
+#   pip install pre-commit
+#   pre-commit install
+#   pre-commit run --all-files
+#
+# VERSION: 3.1.0
+# ═══════════════════════════════════════════════════════════════════════════════
+
+repos:
+  # --- Standard pre-commit hooks ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+
+  # --- Python syntax validation ---
+  - repo: local
+    hooks:
+      - id: py-compile
+        name: Python Syntax Check (py_compile)
+        entry: python3 -m py_compile
+        language: system
+        files: '\.py$'
+        types: [python]
+
+      - id: bash-syntax
+        name: Bash Syntax Check (launch_game.sh)
+        entry: bash
+        language: system
+        args:
+          - '-c'
+          - |
+            python3 -c "
+            import re, sys
+            with open('debian_gaming_setup.py', 'r') as f:
+                content = f.read()
+            match = re.search(r\"r'''(#!/bin/bash.*?)'''\", content, re.DOTALL)
+            if match:
+                with open('/tmp/pre_commit_launch_game.sh', 'w') as f:
+                    f.write(match.group(1))
+            else:
+                sys.exit(1)
+            " && bash -n /tmp/pre_commit_launch_game.sh
+        files: 'debian_gaming_setup\.py$'
+        pass_filenames: false
+
+      - id: anti-pattern-grep
+        name: Hallucination Prevention Check
+        entry: bash
+        language: system
+        args:
+          - '-c'
+          - |
+            if grep -qE 'TIMEOUT_API0|GPUType|RoyalHighgrass|DadSchoworseorse' debian_gaming_setup.py; then
+              echo "FAIL: Hallucinated pattern found!"
+              grep -nE 'TIMEOUT_API0|GPUType|RoyalHighgrass|DadSchoworseorse' debian_gaming_setup.py
+              exit 1
+            fi
+        files: 'debian_gaming_setup\.py$'
+        pass_filenames: false
+
+      - id: no-shell-true
+        name: No shell=True Check
+        entry: python3
+        language: system
+        args:
+          - '-c'
+          - |
+            import ast, sys
+            with open('debian_gaming_setup.py') as f:
+                tree = ast.parse(f.read())
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    if isinstance(node.func, ast.Attribute) and node.func.attr in ('run', 'Popen', 'call'):
+                        for kw in node.keywords:
+                            if kw.arg == 'shell' and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+                                print(f'shell=True at line {node.lineno}')
+                                sys.exit(1)
+        files: 'debian_gaming_setup\.py$'
+        pass_filenames: false
