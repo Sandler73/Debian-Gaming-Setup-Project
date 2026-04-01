@@ -1,0 +1,86 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Debian Gaming Setup Script — Funding Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# SYNOPSIS:
+#   GitHub funding configuration that displays a "Sponsor" button on the
+#   repository page. Defines supported funding platforms and accounts.
+#
+# DESCRIPTION:
+#   This file configures the GitHub Sponsors button and links to funding
+#   platforms. When users click "Sponsor" on the repository, they are
+#   presented with the configured options below.
+#
+#   To enable a platform, uncomment its line and replace the placeholder
+#   with your actual username or project identifier on that platform.
+#
+# REFERENCE:
+#   https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+#
+# VERSION: 3.4.0
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GitHub Sponsors
+# ─────────────────────────────────────────────────────────────────────────────
+# GitHub's built-in sponsorship platform. Supports one-time and recurring
+# donations with configurable tiers. GitHub does not charge platform fees.
+# https://github.com/sponsors
+github: [Sandler73]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Patreon
+# ─────────────────────────────────────────────────────────────────────────────
+# Membership platform for recurring support with tiered benefits.
+# https://www.patreon.com/
+# patreon: # Replace with your Patreon username
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Open Collective
+# ─────────────────────────────────────────────────────────────────────────────
+# Transparent funding platform for open source projects. Shows how funds
+# are received and spent. Ideal for community-driven projects.
+# https://opencollective.com/
+# open_collective: # Replace with your Open Collective slug
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ko-fi
+# ─────────────────────────────────────────────────────────────────────────────
+# Simple platform for one-time "coffee" donations and memberships.
+# No platform fee on donations. https://ko-fi.com/
+# ko_fi: # Replace with your Ko-fi username
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Liberapay
+# ─────────────────────────────────────────────────────────────────────────────
+# Open source, non-profit recurring donation platform. Focused on
+# sustainability for FOSS projects. https://liberapay.com/
+# liberapay: # Replace with your Liberapay username
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IssueHunt
+# ─────────────────────────────────────────────────────────────────────────────
+# Platform for funding specific issues and feature requests. Bounties
+# are paid when issues are resolved. https://issuehunt.io/
+# issuehunt: # Replace with your IssueHunt username
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tidelift
+# ─────────────────────────────────────────────────────────────────────────────
+# Enterprise subscription model for open source maintenance. Provides
+# commercial support guarantees. https://tidelift.com/
+# tidelift: # Format: platform-name/package-name
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LFX Crowdfunding (Linux Foundation)
+# ─────────────────────────────────────────────────────────────────────────────
+# Linux Foundation's crowdfunding platform for open source projects.
+# https://crowdfunding.lfx.linuxfoundation.org/
+# lfx_crowdfunding: # Replace with your LFX project identifier
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Custom Funding URLs
+# ─────────────────────────────────────────────────────────────────────────────
+# Up to 4 custom URLs for additional funding platforms, personal donation
+# pages, or project-specific fundraising campaigns.
+# custom: # ['https://your-custom-funding-url.com']
