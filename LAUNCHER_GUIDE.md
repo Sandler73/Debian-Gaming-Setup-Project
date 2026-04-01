@@ -2,7 +2,7 @@
 
 ## `~/launch-game.sh` — Comprehensive Usage Documentation
 
-**Version:** 2.6.0 | **Created by:** Debian Gaming Setup Script
+**Version:** 3.5.0 | **Created by:** Debian Gaming Setup Script
 **Location:** `~/launch-game.sh` (created during installation)
 
 ---
@@ -357,12 +357,12 @@ Examples:
 ```
 
 **Cause:** Lutris interprets empty command-line arguments as an invalid URI. This occurred in pre-v2.6.0 versions of the launcher.
-**Fix:** Update to v2.6.0+ which includes the Flatpak resolver and empty-argument fix. Re-run the setup script or regenerate the launcher.
+**Fix:** update to v3.5.0+ which includes the Flatpak resolver and empty-argument fix. Re-run the setup script or regenerate the launcher.
 
 ### "command not found" for Heroic/Lutris
 
 **Cause:** App was installed via Flatpak, which doesn't create binaries in `$PATH`.
-**Fix:** Update to v2.6.0+ which includes automatic Flatpak resolution. Or launch directly: `flatpak run com.heroicgameslauncher.hgl`
+**Fix:** update to v3.5.0+ which includes automatic Flatpak resolution. Or launch directly: `flatpak run com.heroicgameslauncher.hgl`
 
 ### CPU Governor Permission Denied
 
@@ -439,6 +439,8 @@ The launcher avoids this by:
 
 | Version | Changes |
 |---------|---------|
+| v3.3.0 | Automated test coverage for launcher syntax validation (bash -n in CI/CD) |
+| v3.0.0 | Eliminated eval in cleanup handler, replaced CLEANUP_TASKS with GOVERNOR_RESTORE_METHOD |
 | v2.6.0 | Flatpak-aware command resolver, `--help` flag, empty-arg fix, LAUNCH_CMD array split |
 | v2.5.0 | Rewritten: MANGOHUD=1 env var, ldconfig validation, Steam-specific handling, MangoHud config creation |
 | v2.0.0 | Initial version with LD_PRELOAD (known multilib issues) |
