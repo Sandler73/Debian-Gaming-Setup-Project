@@ -2,7 +2,7 @@
 
 ## Debian Gaming Setup Script — Comprehensive FAQ
 
-**Version:** 2.6.0 | **Last Updated:** February 2026
+**Version:** 3.5.0 | **Last Updated:** March 2026
 
 ---
 
@@ -35,7 +35,7 @@ The script supports all Debian-based distributions, including Ubuntu (22.04, 24.
 
 ### What are the system requirements?
 
-You need Python 3.7 or later (pre-installed on all modern Debian-based distros), root/sudo access for package installation, an active internet connection, and at least 2 GB of free disk space. 4+ GB RAM is recommended for a comfortable gaming experience.
+You need Python 3.12 or later, root/sudo access for package installation, an active internet connection, and at least 2 GB of free disk space. 4+ GB RAM is recommended for a comfortable gaming experience.
 
 ### Does the script require any external Python dependencies?
 
@@ -267,9 +267,25 @@ sudo python3 debian_gaming_setup.py --rollback
 
 The rollback system reverses the last installation session's changes in LIFO (last-in-first-out) order: removes packages, restores config files, cleans up repositories.
 
+### How do I completely uninstall all gaming components?
+
+```bash
+sudo python3 debian_gaming_setup.py --uninstall
+```
+
+The `--uninstall` mode is different from `--rollback`. While rollback only undoes the most recent session, uninstall scans your entire system for all known gaming components (APT packages, Flatpak apps, GE-Proton versions, configuration files) and offers to remove them all. It shows a categorized inventory before proceeding and removes in reverse dependency order.
+
+### What is the difference between --rollback and --uninstall?
+
+`--rollback` reverses only the actions from the most recent installation session using the recorded manifest. `--uninstall` is a comprehensive removal that scans the system for all known gaming components regardless of when they were installed. Use `--rollback` if you just ran the script and want to undo it; use `--uninstall` for a full clean removal.
+
+### How do I check what version of a package is available before updating?
+
+The script automatically shows installed and available versions at every install/update prompt. For each component, you will see the current version, the latest available version (from APT or Flatpak), and whether an update is available. This applies to all gaming platforms, performance tools, communication apps, codecs, and VM guest tools.
+
 ### Where are the log files?
 
-Installation logs are written to `~/gaming_setup.log`. State information is in `~/gaming_setup_state.json`. Rollback manifests are in `~/gaming_setup_rollback.json`. These files are owned by your user account, not root.
+Installation logs are written to `~/gaming_setup_logs/gaming_setup_YYYYMMDD_HHMMSS.log` (a new file per session). State information is in `~/gaming_setup_logs/installation_state.json`. Rollback manifests are in `~/gaming_setup_logs/rollback_manifest.json`. These files are owned by your user account, not root.
 
 ### How do I check the system health after installation?
 
@@ -311,7 +327,15 @@ Check these: (1) PulseAudio/PipeWire is running: `pactl info`. (2) For Wine game
 
 ### "Wrong ELF class: ELFCLASS64" errors
 
-This indicates a 64-bit library being loaded into a 32-bit process. The performance launcher (v2.5.0+) fixes this by using `MANGOHUD=1` instead of LD_PRELOAD. If using older scripts, update the launcher or configure MangoHud through Steam Launch Options instead.
+This indicates a 64-bit library being loaded into a 32-bit process. The performance launcher (v2.5.0+) fixes this by using `MANGOHUD=1` instead of LD_PRELOAD. If using an older script version, update to v3.5.0 or configure MangoHud through Steam Launch Options instead.
+
+### "Package has no installation candidate" on Zorin OS or other derivatives
+
+Some packages (e.g., `linux-cpupower`) may have metadata in the repository but no installable candidate on certain derivatives. As of v3.3.0+, the script uses `apt-cache policy` to verify installable candidates before attempting installation, and automatically skips unavailable packages. If you encounter this error on older versions, update to v3.5.0.
+
+### The system upgrade step hangs and never completes
+
+This was fixed in v3.2.0. The upgrade now uses `--force-confold` and `--force-confdef` dpkg options to prevent interactive configuration prompts that can cause hangs even with `DEBIAN_FRONTEND=noninteractive`. If you experience this on older versions, update to v3.5.0, or press Ctrl+C and re-run with `--skip-update`.
 
 ### Games run but performance is poor
 
