@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/header-debian-gaming.png" alt="Debian Gaming Setup Project" width="100%" />
+</p>
+
 # Debian-Based Gaming Setup Script v2.6
 
 **A comprehensive automated gaming environment setup for Debian-based Linux distributions**
