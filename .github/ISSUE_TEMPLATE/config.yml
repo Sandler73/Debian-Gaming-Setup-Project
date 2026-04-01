@@ -1,0 +1,31 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Issue Template Chooser Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Controls the issue template selection screen shown when users click
+# "New Issue" on the repository. Blank issues can be disabled to ensure
+# all issues follow a structured template.
+#
+# VERSION: 3.4.0
+# ═══════════════════════════════════════════════════════════════════════════════
+
+blank_issues_enabled: false
+
+contact_links:
+  - name: 📖 Documentation & Wiki
+    url: https://github.com/Sandler73/Debian-Gaming-Setup-Project/wiki
+    about: >
+      Check the wiki for guides, FAQ, troubleshooting, and configuration
+      reference before opening an issue.
+
+  - name: 💬 Discussions
+    url: https://github.com/Sandler73/Debian-Gaming-Setup-Project/discussions
+    about: >
+      Ask questions, share configurations, or discuss ideas in GitHub
+      Discussions instead of opening an issue.
+
+  - name: 🔒 Security Vulnerability (Private)
+    url: https://github.com/Sandler73/Debian-Gaming-Setup-Project/security/advisories/new
+    about: >
+      Report security vulnerabilities privately through GitHub's Security
+      Advisory feature. Do NOT open a public issue for security concerns.
