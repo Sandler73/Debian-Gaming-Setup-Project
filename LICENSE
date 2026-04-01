@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Debian-Based Gaming Setup Script Contributors - Ryan (aka Sandler73)
+Copyright (c) 2026 Sandler73
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,60 +20,292 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
----
+===============================================================================
+ADDITIONAL TERMS AND NOTICES
+===============================================================================
 
-THIRD-PARTY SOFTWARE
+The following additional terms supplement but do not replace the MIT License
+above. In the event of a conflict, the MIT License text shall govern.
 
-This script facilitates the installation of third-party software packages, each
-governed by their own licenses:
+-------------------------------------------------------------------------------
+1. DISCLAIMER OF WARRANTY
+-------------------------------------------------------------------------------
 
-- Steam: Valve Corporation End User License Agreement
-- Lutris: GPLv3
-- Heroic Games Launcher: GPLv3
-- Wine: LGPLv2.1+
-- GameMode: BSD-3-Clause
-- MangoHud: MIT License
-- Discord: Discord Terms of Service
-- OBS Studio: GPLv2
-- SOBER/Vinegar: GPLv3
-- Waydroid: Apache License 2.0
-- GreenWithEnvy: GPLv3
-- vkBasalt: Zlib License
+THE SOFTWARE IS PROVIDED ON AN "AS IS" AND "AS AVAILABLE" BASIS. THE AUTHORS,
+COPYRIGHT HOLDERS, AND CONTRIBUTORS MAKE NO REPRESENTATIONS OR WARRANTIES OF
+ANY KIND, WHETHER EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, INCLUDING BUT NOT
+LIMITED TO:
 
-Users are responsible for complying with the licenses of all installed software.
+  (a) WARRANTIES OF MERCHANTABILITY — No warranty that the Software is of
+      merchantable quality, fit for sale, or suitable for commercial use.
 
----
+  (b) FITNESS FOR A PARTICULAR PURPOSE — No warranty that the Software will
+      meet your specific requirements, fulfill a particular need, or perform
+      in a manner you expect. This includes, without limitation, use in
+      production environments, critical infrastructure, safety-critical
+      systems, or any environment where software failure could result in
+      harm to persons or property.
 
-WARRANTY & LIABILITY DISCLAIMER
+  (c) NON-INFRINGEMENT — No warranty that the Software does not infringe
+      upon the intellectual property rights, patents, trademarks, trade
+      secrets, or copyrights of any third party.
 
-THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED. THE AUTHORS OR COPYRIGHT HOLDERS SHALL NOT BE LIABLE FOR ANY CLAIM,
-DAMAGES OR OTHER LIABILITY ARISING FROM THE USE OF THIS SOFTWARE.
+  (d) ACCURACY OR COMPLETENESS — No warranty that the Software, its
+      documentation, output, or behavior is accurate, complete, reliable,
+      current, or free of errors, defects, viruses, or harmful components.
 
-Users assume all risks associated with installation and use of this script,
-including but not limited to:
-- System modifications
-- Data loss
-- Software compatibility issues
-- Performance degradation
-- Security vulnerabilities in third-party software
+  (e) UNINTERRUPTED OR ERROR-FREE OPERATION — No warranty that the Software
+      will operate without interruption, that defects will be corrected, or
+      that the Software is free of bugs, vulnerabilities, or security flaws.
 
-ALWAYS backup important data before running system modification scripts.
+  (f) COMPATIBILITY — No warranty that the Software is compatible with any
+      particular hardware, software, operating system, Linux distribution,
+      kernel version, desktop environment, GPU model, network configuration,
+      or third-party service, or that it will remain compatible with future
+      versions of its dependencies.
 
----
+  (g) SECURITY — No warranty that the Software provides adequate security
+      protections, that its security features are sufficient for any
+      particular threat model, that data transmitted through or managed by
+      the Software will be protected from unauthorized access, interception,
+      modification, or disclosure, or that the Software is free from
+      exploitable vulnerabilities. While the Software incorporates security
+      best practices (including elimination of shell injection vectors,
+      bounded network reads, secure temporary file handling, and checksum
+      verification), these measures do not constitute a guarantee of
+      security.
 
-ATTRIBUTION
+  (h) DATA INTEGRITY — No warranty that the Software will not cause loss,
+      corruption, or unauthorized modification of data, files, system
+      configurations, package states, driver installations, or services.
 
-If you use this software in your project or distribute a modified version,
-please maintain attribution to the original authors and contributors.
+  (i) SYSTEM MODIFICATION — The Software is designed to make system-level
+      modifications to Debian-based Linux distributions, including but not
+      limited to: installing and removing software packages, adding and
+      modifying software repositories, modifying system configuration files,
+      enabling hardware drivers, and altering kernel parameters. Users
+      acknowledge that such modifications carry inherent risks and accept
+      full responsibility for any consequences arising from the use of the
+      Software on their systems.
 
-Suggested attribution:
-"Based on Debian-Based Gaming Setup Project"
-"https://github.com/Sandler73/Debian-Gaming-Setup-Project/tree/main"
+THE ENTIRE RISK AS TO THE QUALITY, PERFORMANCE, SECURITY, AND RESULTS
+OBTAINED FROM THE SOFTWARE IS WITH YOU. SHOULD THE SOFTWARE PROVE DEFECTIVE,
+YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR, OR CORRECTION.
 
----
+-------------------------------------------------------------------------------
+2. LIMITATION OF LIABILITY
+-------------------------------------------------------------------------------
 
-CONTRIBUTIONS
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL THE
+AUTHORS, COPYRIGHT HOLDERS, CONTRIBUTORS, OR ANY PARTY WHO MODIFIES AND/OR
+REDISTRIBUTES THE SOFTWARE BE LIABLE FOR ANY OF THE FOLLOWING, WHETHER BASED
+ON WARRANTY, CONTRACT, TORT (INCLUDING NEGLIGENCE), STRICT LIABILITY, OR ANY
+OTHER LEGAL THEORY, EVEN IF SUCH PARTY HAS BEEN ADVISED OF THE POSSIBILITY
+OF SUCH DAMAGES:
 
-By contributing to this project, you agree that your contributions will be
-licensed under the same MIT License.
+  (a) DIRECT DAMAGES — Any direct financial loss, cost, or expense arising
+      from the use or inability to use the Software.
+
+  (b) INDIRECT DAMAGES — Any loss or damage that does not arise directly
+      from the Software but is a consequence of a direct loss.
+
+  (c) INCIDENTAL DAMAGES — Any cost incurred as a result of a primary loss
+      caused by the Software, including but not limited to costs of
+      substitute goods, services, or technology.
+
+  (d) CONSEQUENTIAL DAMAGES — Any loss resulting as a secondary consequence
+      of the use or failure of the Software, including but not limited to
+      loss of revenue, profit, business, goodwill, anticipated savings,
+      data, or use.
+
+  (e) SPECIAL DAMAGES — Any loss arising from special circumstances
+      particular to the user that were not foreseeable at the time the
+      Software was obtained.
+
+  (f) PUNITIVE OR EXEMPLARY DAMAGES — Any damages imposed as punishment
+      or to set an example, regardless of the nature of the claim.
+
+  (g) LOSS OF DATA — Any loss, corruption, destruction, or unauthorized
+      disclosure of data, regardless of whether such data was created,
+      stored, processed, transmitted, or managed by the Software.
+
+  (h) SYSTEM DAMAGE — Any damage to computer systems, networks, hardware,
+      software, drivers, or infrastructure arising from the installation,
+      use, operation, or removal of the Software, including but not limited
+      to: GPU driver conflicts, broken package states, corrupted system
+      configurations, boot failures, or data loss resulting from system
+      modification operations.
+
+  (i) THIRD-PARTY SOFTWARE — Any claims, damages, or issues arising from
+      third-party software packages, applications, drivers, libraries, or
+      services installed through the use of the Software, including but
+      not limited to: Steam, Lutris, Heroic, Wine, GE-Proton, Flatpak
+      applications, NVIDIA/AMD/Intel drivers, and any other components
+      obtained from external repositories.
+
+  (j) THIRD-PARTY CLAIMS — Any claims brought by third parties against
+      the user arising from the user's use of the Software.
+
+IF ANY JURISDICTION DOES NOT ALLOW THE EXCLUSION OR LIMITATION OF LIABILITY
+FOR CERTAIN TYPES OF DAMAGES, THE LIABILITY OF THE AUTHORS AND CONTRIBUTORS
+SHALL BE LIMITED TO THE MAXIMUM EXTENT PERMITTED BY THE APPLICABLE LAW OF
+THAT JURISDICTION.
+
+IN NO EVENT SHALL THE TOTAL AGGREGATE LIABILITY OF THE AUTHORS, COPYRIGHT
+HOLDERS, AND CONTRIBUTORS FOR ALL CLAIMS ARISING OUT OF OR RELATED TO THE
+SOFTWARE EXCEED THE AMOUNT PAID BY YOU FOR THE SOFTWARE (WHICH IS ZERO, AS
+THE SOFTWARE IS PROVIDED FREE OF CHARGE).
+
+-------------------------------------------------------------------------------
+3. INDEMNIFICATION
+-------------------------------------------------------------------------------
+
+You agree to indemnify, defend, and hold harmless the authors, copyright
+holders, and contributors from and against any and all claims, demands,
+actions, liabilities, damages, losses, costs, and expenses (including
+reasonable attorneys' fees) arising out of or related to:
+
+  (a) Your use or misuse of the Software;
+  (b) Your violation of any applicable law, regulation, or third-party right
+      in connection with your use of the Software;
+  (c) Any content, data, or configuration changes made by the Software under
+      your direction or control;
+  (d) Your modification, redistribution, or sublicensing of the Software;
+  (e) Any claim that your use of the Software caused damage to a third party.
+
+-------------------------------------------------------------------------------
+4. USER RESPONSIBILITY
+-------------------------------------------------------------------------------
+
+You are solely responsible for:
+
+  (a) SUITABILITY — Ensuring the suitability of this Software for your
+      intended use and system configuration.
+
+  (b) BACKUPS — Creating adequate backups of your data, system
+      configurations, and package states before running this Software.
+
+  (c) REVIEW — Reviewing the operations performed by the Software via
+      --dry-run mode and log inspection before and after execution.
+
+  (d) INTEGRITY — Maintaining the security of your systems, including but
+      not limited to verifying the integrity and authenticity of the
+      Software before execution (e.g., via checksum verification or
+      reviewing the source code).
+
+  (e) COMPLIANCE — Complying with all applicable laws, regulations, and
+      third-party license agreements related to the software packages
+      installed by this Software, including GPU driver license terms,
+      Flatpak application licenses, and repository terms of service.
+
+  (f) TESTING — Testing this Software in a non-production environment
+      before deploying to systems with important data or configurations.
+
+-------------------------------------------------------------------------------
+5. AUTHORIZED USE AND COMPLIANCE
+-------------------------------------------------------------------------------
+
+  (a) INTENDED PURPOSE — This Software is intended for configuring gaming
+      environments on Debian-based Linux distributions for personal,
+      educational, and authorized use only.
+
+  (b) LEGAL COMPLIANCE — You are solely responsible for ensuring that your
+      use of the Software complies with all applicable local, state,
+      provincial, national, and international laws and regulations.
+
+  (c) PROHIBITED USE — The authors and contributors do not authorize and
+      expressly disclaim any responsibility for the use of this Software
+      for any unlawful purpose or any purpose that violates the rights
+      of others.
+
+  (d) NO ENDORSEMENT — Use of this Software does not imply endorsement,
+      sponsorship, or affiliation with any organization, institution, or
+      individual associated with the authors or contributors.
+
+-------------------------------------------------------------------------------
+6. THIRD-PARTY DEPENDENCIES
+-------------------------------------------------------------------------------
+
+This Software facilitates the installation of third-party software components
+that are distributed under their own respective licenses. The authors and
+contributors of this Software make no representations or warranties regarding
+third-party components. Users are responsible for reviewing and complying with
+the license terms of all dependencies, including but not limited to:
+
+  - Steam (Valve Corporation) — Proprietary
+  - Lutris — GPLv3
+  - Wine/Wine Staging — LGPLv2.1+
+  - GE-Proton (GloriousEggroll) — BSD-3-Clause
+  - MangoHud — MIT License
+  - GameMode (Feral Interactive) — BSD-3-Clause
+  - vkBasalt — zlib License
+  - Flatpak applications — Individual app licenses
+  - NVIDIA drivers — Proprietary NVIDIA license
+  - Mesa/AMDGPU/Intel drivers — MIT/X11
+  - GNU Bash — GPLv3+
+
+The inclusion of or reliance on these dependencies does not extend this
+License to those components, nor does it alter the license terms under which
+those components are distributed.
+
+-------------------------------------------------------------------------------
+7. NO OBLIGATION OF SUPPORT
+-------------------------------------------------------------------------------
+
+The authors and contributors are under no obligation to provide technical
+support, maintenance, updates, patches, bug fixes, security advisories, or
+any other form of ongoing service or communication related to the Software.
+Any support provided is at the sole discretion of the authors and may be
+withdrawn at any time without notice.
+
+-------------------------------------------------------------------------------
+8. MODIFICATIONS AND CONTRIBUTIONS
+-------------------------------------------------------------------------------
+
+  (a) MODIFICATIONS — You may modify the Software for your own use. If you
+      distribute modified versions, you must include prominent notice that
+      you have changed the Software, include the date of the changes, and
+      retain this License in its entirety.
+
+  (b) CONTRIBUTIONS — By submitting contributions (including but not limited
+      to code, documentation, bug reports, and feature requests) to this
+      project, you grant the authors a perpetual, worldwide, non-exclusive,
+      royalty-free, irrevocable license to use, reproduce, modify, display,
+      perform, sublicense, and distribute your contributions as part of the
+      Software under the terms of this License.
+
+  (c) NO COMPENSATION — You acknowledge that contributions are made
+      voluntarily and that no compensation, credit beyond standard
+      attribution, or other consideration is owed for contributions.
+
+-------------------------------------------------------------------------------
+9. TERMINATION
+-------------------------------------------------------------------------------
+
+This License is effective until terminated. Your rights under this License
+will terminate automatically without notice if you fail to comply with any
+of its terms. Upon termination, you shall cease all use and distribution of
+the Software and destroy all copies in your possession. Sections 1 through 7
+shall survive any termination of this License.
+
+-------------------------------------------------------------------------------
+10. GOVERNING LAW AND SEVERABILITY
+-------------------------------------------------------------------------------
+
+  (a) SEVERABILITY — If any provision of this License is held to be
+      unenforceable or invalid, that provision shall be enforced to the
+      maximum extent permissible, and the remaining provisions shall
+      continue in full force and effect.
+
+  (b) ENTIRE AGREEMENT — This License constitutes the entire agreement
+      between the parties with respect to the Software and supersedes all
+      prior or contemporaneous understandings, agreements, or
+      representations.
+
+  (c) WAIVER — The failure of any party to enforce any provision of this
+      License shall not constitute a waiver of that party's right to
+      enforce that provision in the future.
+
+===============================================================================
+END OF LICENSE
+===============================================================================
