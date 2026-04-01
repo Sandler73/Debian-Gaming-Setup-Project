@@ -9,7 +9,7 @@
 | 2.0.x-2.1.x | :white_check_mark: | Yes         |
 | 1.x.x   | :x:                | No (Legacy)      |
 
-**Current Stable Version:** 2.5.0
+**Current Stable Version:** 3.5.0
 
 ---
 
@@ -83,7 +83,7 @@ This script requires `sudo` privileges to:
 
 ### 🛡️ Security Features
 
-**v2.5.0 Security Hardening:** ✨
+**v3.4.2 Security Hardening:** ✨
 
 - ✅ **No `shell=True` subprocess calls** — All commands use list-form arguments, preventing shell injection. The debconf EULA pipe uses `subprocess.run(input=)` instead of shell echo-pipe
 - ✅ **No bare `except` clauses** — Every try/except block catches specific exception types (`OSError`, `IOError`, `subprocess.SubprocessError`, `json.JSONDecodeError`, etc.). One documented outermost catch-all retained in `run()` as last-resort handler
@@ -347,6 +347,13 @@ We welcome security researchers to:
 
 | Version | Security Change |
 |---------|----------------|
+| 3.4.2 | GE-Proton checksum verification skipped in dry-run mode (prevents false FileNotFoundError), health check summary now details specific warnings/failures |
+| 3.4.1 | Fixed runtime TypeError from mixed logging format, AMD GPU false detection via 'ati'/'compatible' substring collision, eliminated all f-string logging (20 calls → %-format), wrapped unprotected os.chown calls, atomic state file write, test suite expanded to 136 tests (100% critical method coverage) |
+| 3.4.0 | Expanded CI/CD with Bandit integration, 7 lint checks (added encoding + import validation), issue templates with security vulnerability form, PR template with security gate, comprehensive .gitignore with secrets section |
+| 3.3.0 | Full --uninstall mode, `_check_package_available` fixed to use `apt-cache policy` (prevents false-positive availability on ZorinOS), bounded Flatpak remote queries |
+| 3.3.0 | 90-test automated suite with 24 security/host-safety tests, CI/CD pipeline with security gates, pre-commit hooks |
+| 3.0.0 | Bounded network reads (MAX_RESPONSE_BYTES), secure tempfile usage, eval elimination in bash, TOCTOU fixes, Python 3.12+ with StrEnum and dataclass slots |
+| 2.6.0 | Pre-install detection for 7 methods, Flatpak command resolver, vkBasalt URL correction |
 | 2.5.0 | Eliminated all shell=True, fixed bare except clauses, signal handlers, secure Waydroid install, categorized timeouts, Flatpak deduplication |
 | 2.4.0 | Self-update syntax validation via py_compile, atomic script replacement |
 | 2.3.0 | Atomic manifest writes (os.replace), GE-Proton SHA512 checksum verification |
@@ -402,7 +409,7 @@ This security policy is reviewed quarterly and updated as needed.
 
 **Last Updated:** February 2026
 **Next Review:** May 2026
-**Version:** 2.5.0
+**Version:** 3.5.0
 
 ---
 
