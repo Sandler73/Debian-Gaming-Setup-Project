@@ -30,7 +30,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?logo=github&logoColor=white)](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/CONTRIBUTING.md)
 
 <!-- ═══ Project Metric Shields ═══ -->
-[![Lines of Code: 5700+](https://img.shields.io/badge/lines%20of%20code-5700+-blue)]()
+[![Lines of Code: 5796](https://img.shields.io/badge/lines%20of%20code-5796-blue)]()
 [![Dependencies: 0](https://img.shields.io/badge/dependencies-0%20external-brightgreen)]()
 [![Wiki: 13 Pages](https://img.shields.io/badge/wiki-13%20pages-blue?logo=readthedocs&logoColor=white)](https://github.com/Sandler73/Debian-Gaming-Setup-Project/wiki)
 
