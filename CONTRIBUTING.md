@@ -1,577 +1,494 @@
-# Contributing to Debian-Based Gaming Setup Script
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- Debian Gaming Setup Script — Contributing Guide                         -->
+<!-- Version: 3.5.0                                                          -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
 
-Thank you for your interest in contributing! This project aims to make Linux gaming accessible to everyone, and your contributions help achieve that goal.
+# Contributing to the Debian Gaming Setup Script
 
----
+Thank you for your interest in contributing! This guide covers everything you need to know to make effective contributions to the project.
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [Code of Conduct](#code-of-conduct)
-- [How Can I Contribute?](#how-can-i-contribute)
-- [Development Setup](#development-setup)
+- [Ways to Contribute](#ways-to-contribute)
+- [Getting Started](#getting-started)
+- [Development Environment](#development-environment)
+- [Project Architecture](#project-architecture)
+- [Code Standards](#code-standards)
+- [Security Requirements](#security-requirements)
+- [Testing Requirements](#testing-requirements)
+- [Documentation Standards](#documentation-standards)
+- [Commit Message Guidelines](#commit-message-guidelines)
 - [Pull Request Process](#pull-request-process)
-- [Coding Standards](#coding-standards)
-- [Testing Guidelines](#testing-guidelines)
-- [Documentation](#documentation)
-- [Community](#community)
+- [Issue Guidelines](#issue-guidelines)
+- [Governance & Tracking](#governance--tracking)
+- [Review Process](#review-process)
+- [Release Process](#release-process)
+- [Community Guidelines](#community-guidelines)
+- [Recognition](#recognition)
 
 ---
 
-## 🤝 Code of Conduct
+## Ways to Contribute
 
-### Our Pledge
+There are many ways to contribute, regardless of your experience level:
 
-We are committed to providing a welcoming and inclusive environment for all contributors, regardless of:
-- Experience level
-- Gender identity and expression
-- Sexual orientation
-- Disability
-- Personal appearance
-- Body size
-- Race or ethnicity
-- Age
-- Religion
-- Nationality
-
-### Expected Behavior
-
-- **Be respectful** - Different viewpoints and experiences are valuable
-- **Be collaborative** - Work together towards common goals
-- **Be patient** - Help newcomers learn
-- **Be constructive** - Offer helpful feedback
-- **Be inclusive** - Welcome diverse perspectives
-
-### Unacceptable Behavior
-
-- Harassment or discriminatory language
-- Personal attacks or trolling
-- Publishing others' private information
-- Spam or off-topic content
-- Any conduct that would be inappropriate in a professional setting
+| Contribution | Description | Skill Level |
+|:---|:---|:---:|
+| 🐛 **Bug Reports** | Report issues you encounter | Beginner |
+| 📖 **Documentation** | Fix typos, improve guides, add examples | Beginner |
+| 🧪 **Testing** | Test on your distro and report results | Beginner |
+| ✨ **Feature Requests** | Suggest new features or improvements | Beginner |
+| 💬 **Discussions** | Answer questions, help other users | Intermediate |
+| 🔧 **Bug Fixes** | Fix reported issues | Intermediate |
+| 🆕 **New Features** | Implement new functionality | Advanced |
+| 🔒 **Security** | Security review, vulnerability fixes | Advanced |
+| ⚡ **Performance** | Optimize code, reduce overhead | Advanced |
+| 🏗️ **Infrastructure** | CI/CD, testing, packaging improvements | Advanced |
 
 ---
 
-## 🎯 How Can I Contribute?
+## Getting Started
 
-### Reporting Bugs 🐛
-
-**Before Submitting:**
-1. Check existing issues to avoid duplicates
-2. Test with the latest version
-3. Use `--dry-run` to reproduce safely
-
-**Bug Report Should Include:**
-- **System information** - Distribution, version, architecture
-- **GPU/Hardware** - GPU vendor, VM if applicable
-- **Steps to reproduce** - Exact commands used
-- **Expected behavior** - What should happen
-- **Actual behavior** - What actually happened
-- **Logs** - Relevant excerpts from `~/gaming_setup_logs/`
-- **Screenshots** - If applicable
-
-**Example Bug Report:**
-```markdown
-## Bug Description
-MangoHud fails to install on Ubuntu 24.04
-
-## System Information
-- **OS:** Ubuntu 24.04.3 LTS
-- **GPU:** NVIDIA RTX 3060
-- **Virtualization:** None
-
-## Steps to Reproduce
-1. sudo python3 debian_gaming_setup.py --mangohud
-2. Installation fails with "Package not found"
-
-## Expected
-MangoHud should install from repos
-
-## Actual
-Error: E: Unable to locate package mangohud
-
-## Logs
-[Paste relevant log excerpt]
-```
-
-### Suggesting Features 💡
-
-**Good Feature Requests Include:**
-- **Clear description** - What feature you want
-- **Use case** - Why you need it
-- **Examples** - How it would work
-- **Alternatives considered** - Other solutions you've thought of
-
-**Example Feature Request:**
-```markdown
-## Feature Description
-Add support for installing GameHub launcher
-
-## Use Case
-GameHub provides unified library management for Steam, GOG, and more
-
-## Proposed Implementation
-- Add --gamehub CLI flag
-- Install via Flatpak (com.github.tkashkin.gamehub)
-- Include in installation summary
-
-## Alternatives
-- User can install manually
-- Could document instead of automating
-```
-
-### Testing on Different Distributions 🧪
-
-We need testers for:
-- Ubuntu variants (Kubuntu, Xubuntu, Ubuntu MATE)
-- Linux Mint editions (Cinnamon, MATE, Xfce)
-- Debian (Stable, Testing, Unstable)
-- Pop!_OS
-- Elementary OS
-- Zorin OS
-- Other Debian-based distributions
-
-**How to Help:**
-1. Test on your distribution
-2. Report results (success or failure)
-3. Provide logs for failures
-4. Document any distribution-specific quirks
-
-### Improving Documentation 📖
-
-Documentation improvements are always welcome:
-- Fix typos or unclear instructions
-- Add examples
-- Improve explanations
-- Translate to other languages (future)
-- Create video tutorials (external)
-
-### Writing Code 💻
-
-See [Development Setup](#development-setup) below.
-
----
-
-## 🛠️ Development Setup
-
-### Prerequisites
+### 1. Fork and Clone
 
 ```bash
-# Install Python development tools
-sudo apt-get install python3 python3-pip git
-
-# Clone repository
-git clone https://github.com/Sandler73/Debian-Gaming-Setup-Project.git
-cd gaming-setup
-
-# Create development branch
-git checkout -b feature/your-feature-name
+git clone https://github.com/YOUR-USERNAME/Debian-Gaming-Setup-Project.git
+cd Debian-Gaming-Setup-Project
 ```
 
-### Testing Your Changes
+### 2. Install Development Dependencies
 
 ```bash
-# Always test with dry-run first
-sudo python3 debian_gaming_setup.py --dry-run [your-options]
-
-# Test in a VM if making significant changes
-# Recommended: Create VM snapshot first
-
-# Test interactive mode
-sudo python3 debian_gaming_setup.py
-
-# Test automated mode
-sudo python3 debian_gaming_setup.py -y --your-new-feature
+make install-dev
 ```
 
-### Code Structure
+This installs pytest, pytest-cov, and pre-commit hooks. For security scanning tools:
+
+```bash
+make install-all-dev  # Includes Bandit
+```
+
+### 3. Verify Your Setup
+
+```bash
+make check  # Run all quality gates (lint + test + security)
+```
+
+All 90 tests must pass before you begin making changes.
+
+### 4. Create a Branch
+
+```bash
+git checkout -b type/description
+```
+
+Use descriptive branch names:
+- `fix/zorin-cpupower-detection`
+- `feature/timeshift-integration`
+- `docs/faq-waydroid-section`
+- `test/mangohud-install-coverage`
+- `infra/ci-performance-testing`
+
+### 5. Read Project Context
+
+Before making code changes, review these files:
+
+| File | Purpose | Required Reading |
+|:---|:---|:---:|
+| `tasks/general_reminders.md` | Governance rules and workflow | ✅ Always |
+| `tasks/lessons.md` | Anti-patterns and past mistakes | ✅ Always |
+| `tasks/sync_function.md` | Code cross-reference and dependencies | ✅ For code changes |
+| `tasks/audit_report.md` | Security audit findings | For security changes |
+| `docs/SECURITY.md` | Security policy and model | For security changes |
+
+---
+
+## Development Environment
+
+### Requirements
+
+| Tool | Version | Purpose |
+|:---|:---|:---|
+| Python | 3.12+ | Runtime (uses StrEnum, slots, walrus, PEP 585/604) |
+| pytest | 7.0+ | Testing framework |
+| pytest-cov | 4.0+ | Coverage reporting |
+| pre-commit | 3.0+ | Git hook management |
+| Bandit | 1.7+ | Security scanning (optional) |
+| GNU Make | 4.0+ | Build system |
+| Bash | 5.0+ | Embedded script validation |
+
+### Project Structure
 
 ```
-debian_gaming_setup_truly_enhanced.py
-├── Imports and Constants (lines 1-200)
-├── Helper Functions (lines 200-300)
-├── Data Classes (lines 300-400)
-├── Argument Parser (lines 400-520)
-├── GamingSetup Class
-│   ├── Initialization (lines 520-700)
-│   ├── Detection Methods (lines 700-1200)
-│   ├── Driver Installation (lines 1200-1700)
-│   ├── Gaming Platforms (lines 1700-2100)
-│   ├── Compatibility Layers (lines 2100-2300)
-│   ├── Utilities (lines 2300-2700)
-│   ├── Optimizations (lines 2700-2900)
-│   ├── Installation Summary (lines 2900-3000)
-│   └── Main Execution (lines 3000-3300)
-└── Main Entry Point (lines 3300-3341)
+debian-gaming-setup/
+├── debian_gaming_setup.py          # Main script (5,764 lines, single file)
+├── Makefile                        # 43 development targets
+├── .pre-commit-config.yaml         # 4 pre-commit hooks
+├── .gitignore                      # 170 exclusion patterns
+├── LICENSE                         # MIT License
+├── CONTRIBUTING.md                 # This file
+├── CODE_OF_CONDUCT.md              # Contributor Covenant v2.1
+├── .github/
+│   ├── FUNDING.yml                 # Sponsor button configuration
+│   ├── PULL_REQUEST_TEMPLATE.md    # PR template (13 sections)
+│   ├── workflows/
+│   │   └── ci.yml                  # CI/CD pipeline (4 jobs)
+│   └── ISSUE_TEMPLATE/
+│       ├── config.yml              # Template chooser
+│       ├── bug_report.yml          # Bug report form
+│       ├── feature_request.yml     # Feature request form
+│       └── security_vulnerability.yml  # Security report form
+├── tests/
+│   ├── conftest.py                 # Shared fixtures
+│   ├── test_unit_pure.py           # 42 unit tests
+│   ├── test_integration.py         # 24 integration tests
+│   └── test_security.py            # 24 security + host safety tests
+├── docs/                           # User documentation (8 files)
+├── wiki/                           # GitHub Wiki pages (13 files)
+└── tasks/                          # Development tracking (8 files)
 ```
 
 ---
 
-## 🔄 Pull Request Process
+## Project Architecture
 
-### 1. Fork and Branch
+The script is a **single-file Python application** (zero external dependencies) centered on the `GamingSetup` class with 92+ methods. Key design principles:
 
-```bash
-# Fork on GitHub, then clone your fork
-git clone https://github.com/Sandler73/Debian-Gaming-Setup-Project.git
-cd gaming-setup
+### Single-File Design
 
-# Create feature branch
-git checkout -b feature/descriptive-name
-# or
-git checkout -b fix/issue-description
-```
+The entire tool is one `.py` file by design — this enables zero-dependency deployment via `wget` and direct execution. Do not split into multiple modules.
 
-### 2. Make Changes
+### Key Code Patterns
 
-- Follow [Coding Standards](#coding-standards)
-- Add comments explaining your changes
-- Update documentation if needed
-- Test thoroughly
+1. **Pre-install detection before prompting** — Every install method must detect existing installations and show version information before asking the user to proceed.
 
-### 3. Commit
+2. **`run_command()` for all subprocess calls** — Never call `subprocess.run()` directly in install methods. Use the wrapper which provides logging, timeout, dry-run, and rollback recording.
 
-```bash
-# Stage your changes
-git add .
+3. **Version-aware prompts** — `prompt_install_or_update()` queries both APT and Flatpak for installed and available versions. Custom install methods should follow the same pattern.
 
-# Commit with descriptive message
-git commit -m "Add support for GameHub launcher
+4. **Dynamic resolution** — No hardcoded codenames, driver versions, or repository URLs. Everything is resolved at runtime.
 
-- Add install_gamehub() method
-- Add --gamehub CLI flag
-- Update installation summary
-- Add documentation"
-```
+5. **Rollback recording** — All install actions are auto-recorded via `_auto_record_from_command()`. New action types should be added to the `ActionType` enum.
 
-**Good Commit Messages:**
-- Start with imperative verb (Add, Fix, Update, Remove)
-- First line: Brief summary (50 chars or less)
-- Blank line
-- Detailed explanation if needed
-- Reference issues: "Fixes #123" or "Relates to #456"
+### Dependency Cross-Reference
 
-### 4. Push and Create PR
-
-```bash
-# Push to your fork
-git push origin feature/descriptive-name
-
-# Create pull request on GitHub
-# Fill in the PR template
-```
-
-### 5. PR Review Process
-
-**Checklist:**
-- [ ] Code follows style guidelines
-- [ ] Comments added where needed
-- [ ] Documentation updated
-- [ ] Tested with `--dry-run`
-- [ ] Tested on at least one distribution
-- [ ] No merge conflicts
-- [ ] Passes any automated checks
-
-**Review Timeline:**
-- Initial review: 2-3 days
-- Follow-up: 1-2 days after changes
-- Merge: After approval from maintainer
+Before modifying any method, check `tasks/sync_function.md` for its callers and dependents. This prevents cascading breakage.
 
 ---
 
-## 📝 Coding Standards
+## Code Standards
 
-### Python Style
+### Python Requirements
 
-**Follow PEP 8** with these specifics:
+| Requirement | Details |
+|:---|:---|
+| **Minimum version** | Python 3.12+ (enforced) |
+| **Type hints** | PEP 585/604: `list[str]`, `dict[str, Any]`, `str \| None` |
+| **Enums** | `StrEnum` (not `Enum`) for string enumerations |
+| **Dataclasses** | `@dataclass(slots=True)` for data containers |
+| **String formatting** | f-strings for print, `%`-formatting for logging |
+| **Walrus operator** | Use `:=` where it improves clarity |
+| **Imports** | Standard library only — zero external dependencies |
+| **Encoding** | `encoding='utf-8'` on all text-mode `open()` calls |
+| **Exceptions** | Specific types only — no bare `except:` or `except Exception` |
+| **Docstrings** | Required on all public methods — descriptive, not stubs |
 
-```python
-# Indentation: 4 spaces (no tabs)
-def my_function():
-    if condition:
-        do_something()
+### Naming Conventions
 
-# Line length: 100 characters max (120 acceptable for long strings)
+| Element | Convention | Example |
+|:---|:---|:---|
+| Classes | PascalCase | `GamingSetup`, `SystemInfo` |
+| Methods | snake_case | `install_steam`, `detect_gpu` |
+| Private methods | `_` prefix | `_resolve_package_name`, `_install_ge_proton` |
+| Constants | UPPER_SNAKE | `TIMEOUT_INSTALL`, `MAX_RESPONSE_BYTES` |
+| Enums | PascalCase class, snake_case members | `GPUVendor.nvidia` |
+| CLI flags | `--kebab-case` | `--ge-proton`, `--all-platforms` |
 
-# Function names: snake_case
-def install_gaming_platform():
-    pass
+### Code Comments
 
-# Class names: PascalCase
-class GamingSetup:
-    pass
+All code must include:
+- Descriptive docstrings on every public method
+- Inline comments for non-obvious logic
+- Section separators (`# ═══...`) for major code sections
+- No stub docstrings (`"""...- """`) or placeholder comments
 
-# Constants: UPPER_CASE
-MAX_RETRIES = 3
-DEFAULT_TIMEOUT = 300
+---
 
-# Private methods: leading underscore
-def _internal_helper():
-    pass
-```
+## Security Requirements
 
-### Documentation
+Security is non-negotiable. Every contribution must satisfy these constraints:
 
-**Docstrings for all methods:**
+### Absolute Rules (Violations Block Merge)
 
-```python
-def install_new_tool(self):
-    """
-    Install NewTool via Flatpak
-    
-    NEW FEATURE: Brief description of what this tool does
-    
-    Performs:
-        - Checks if Flatpak is installed
-        - Adds Flathub repository
-        - Installs com.example.NewTool
-        - Creates default configuration
-    
-    Returns:
-        bool: True if successful, False otherwise
-    
-    Example:
-        >>> setup.install_new_tool()
-        Installing NewTool via Flatpak...
-        ✓ NewTool installed successfully
-    """
-    # Implementation
-```
+| Rule | CWE | Rationale |
+|:---|:---|:---|
+| No `shell=True` in subprocess | CWE-78 | Command injection prevention |
+| No `eval()` or `exec()` in Python | CWE-95 | Code injection prevention |
+| No `eval` in embedded bash | CWE-95 | Code injection prevention |
+| No hardcoded `/tmp/` paths | CWE-377 | Insecure temporary file prevention |
+| No bare `except:` | CWE-755 | Improper exception handling |
+| No hardcoded credentials | CWE-798 | Secret exposure prevention |
+| All `response.read()` must be bounded | CWE-400 | Resource consumption prevention |
+| All `open()` must specify `encoding` | — | Consistent text handling |
 
-### Comments
+### Best Practices
 
-**Good comments explain WHY, not WHAT:**
+- Use `tempfile.mkdtemp()` with `try/finally` cleanup for temp files
+- Use `try/except FileNotFoundError` instead of check-then-act (TOCTOU prevention)
+- Use `os.replace()` for atomic file writes (state, manifests)
+- Verify SHA512 checksums for all downloaded archives
+- Use `py_compile` validation before replacing script files
 
-```python
-# Good
-# Use Flatpak because package not in Ubuntu 24.04 repos
-self.run_command(["flatpak", "install", ...])
+### Automated Security Checks
 
-# Bad
-# Install package
-self.run_command(["flatpak", "install", ...])
+The CI/CD pipeline and pre-commit hooks automatically verify:
+- `py_compile` syntax validation
+- `bash -n` embedded script validation
+- AST-based shell=True detection
+- AST-based eval/exec detection
+- Anti-hallucination pattern grep (4 known bad strings)
+- Encoding parameter validation
+- Deprecated import detection
+- Bandit static security scan
 
-# Good
-# PRESERVED FROM ORIGINAL: Exact same version checking logic
-if self.is_package_installed(package_name):
-    ...
+---
 
-# Good
-# ENHANCED: Added fallback for Ubuntu 24.04 compatibility
-if not success:
-    # Try alternative package name
-```
+## Testing Requirements
 
-### Error Handling
+### Test Suite Structure
 
-**Always handle errors gracefully:**
+| File | Tests | Coverage |
+|:---|:---:|:---|
+| `test_unit_pure.py` | 42 | Pure functions: version parser, argparse, Color, Enums, dataclasses, constants |
+| `test_integration.py` | 24 | Mocked subprocess/IO: run_command, package detection, file I/O, utilities |
+| `test_security.py` | 24 | 13 static security (CWE-mapped) + 11 host safety runtime tests |
 
-```python
-# Good
-success, stdout, stderr = self.run_command(
-    cmd, 
-    description,
-    check=False  # Don't fail completely
-)
+### Testing Rules
 
-if not success:
-    print(f"{Color.YELLOW}⚠ Installation failed{Color.END}")
-    print(f"{Color.CYAN}  Manual installation: https://example.com{Color.END}")
-    return  # Continue with rest of script
+1. **All PRs must pass the full test suite** — `make check` (90 tests)
+2. **New features require new tests** — At minimum, unit tests for pure logic and integration tests for methods with side effects
+3. **No real system changes in tests** — All external calls must be mocked. Tests must be safe to run anywhere.
+4. **Never hardcode SCRIPT_VERSION in assertions** — Use `gaming_module.SCRIPT_VERSION` dynamically
+5. **Security tests are required** for any code touching subprocess, file I/O, or network
 
-# Bad
-self.run_command(cmd, description)  # Will crash on error
-```
+### Running Tests
 
-### Configuration
-
-**Add to InstallationConfig dataclass:**
-
-```python
-@dataclass
-class InstallationConfig:
-    # ... existing fields ...
-    
-    # NEW: Your feature
-    install_your_feature: bool = False  # Brief comment
-```
-
-**Add to argument parser:**
-
-```python
-tools.add_argument('--your-feature', action='store_true',
-                  help='Install YourFeature (brief description)')
-```
-
-**Add to config initialization:**
-
-```python
-config.install_your_feature = getattr(self.args, 'your_feature', False)
+```bash
+make check         # Full quality gate (lint + test + security)
+make test          # All 90 tests (verbose)
+make test-unit     # Unit tests only (42)
+make test-integration  # Integration tests only (24)
+make test-security # Security + host safety tests (24)
+make test-failed   # Re-run only previously failed tests
+make coverage      # Tests with coverage report
 ```
 
 ---
 
-## 🧪 Testing Guidelines
+## Documentation Standards
 
-### Manual Testing Checklist
+### Required Updates
 
-**Before Submitting PR:**
+Every code change must update these files (per governance rules):
 
-- [ ] Tested with `--dry-run` flag
-- [ ] Tested interactive mode (no CLI args)
-- [ ] Tested automated mode (with CLI args)
-- [ ] Tested on clean system (VM recommended)
-- [ ] Verified logs contain no errors
-- [ ] Checked installation summary shows component
-- [ ] Tested actual functionality of installed component
-- [ ] Reviewed all print statements for clarity
+| File | When to Update |
+|:---|:---|
+| `tasks/todo.md` | Always — mark items complete |
+| `tasks/todo_complete.md` | Always — log delivery |
+| `docs/CHANGELOG.md` | Always — user-facing changelog entry |
+| `tasks/sync_function.md` | When code structure changes |
+| `tasks/lessons.md` | When a new anti-pattern is discovered |
 
-### Test Scenarios
+### Documentation Quality
 
-**Minimum Test Matrix:**
-
-| Scenario | Expected Result |
-|----------|----------------|
-| `--dry-run --your-feature` | Shows what would be done |
-| `--your-feature` (interactive) | Prompts user, respects answer |
-| `-y --your-feature` | Installs without prompts |
-| Feature already installed | Detects, offers update/reinstall |
-| Installation failure | Graceful error, continues script |
-| Incompatible system | Warns, allows override or skips |
-
-### VM Testing (Recommended)
-
-**Set up test VM:**
-1. Create Ubuntu 24.04 VM
-2. Take snapshot
-3. Test your changes
-4. Revert snapshot
-5. Test again to verify reproducibility
-
-**Recommended VMs:**
-- Ubuntu 24.04 (primary)
-- Ubuntu 22.04 (LTS)
-- Debian 12 (stable)
-- Linux Mint 22 (Ubuntu-based)
+- Markdown formatting consistent with existing docs
+- Version references must match `SCRIPT_VERSION`
+- No broken links — verify with `make docs-check`
+- Wiki cross-links verified with `make docs-links`
 
 ---
 
-## 📚 Documentation
+## Commit Message Guidelines
 
-### What to Update
+### Format
 
-**When adding new feature:**
-1. **README.md** - Add to feature list and examples
-2. **Usage_Guide.md** - Full documentation with examples
-3. **Quick_Start.md** - If relevant for beginners
-4. **CHANGELOG.md** - Add to "Unreleased" section
-5. **Code comments** - Explain implementation
+```
+type(scope): brief description
 
-### Documentation Style
+Longer explanation if needed (what, why, how).
 
-**Be clear and concise:**
-- Use active voice
-- Provide examples
-- Explain prerequisites
-- Show expected output
-- Link to external docs when appropriate
-
-**Example:**
-```markdown
-### Install YourFeature
-
-YourFeature provides X functionality for Y purpose.
-
-**CLI Flag:** `--your-feature`
-
-**Prerequisites:**
-- Python 3.6+
-- Internet connection
-
-**Usage:**
-```bash
-# Interactive
-sudo python3 debian_gaming_setup.py
-
-# Automated
-sudo python3 debian_gaming_setup.py --your-feature
+Refs: #issue-number
 ```
 
-**Post-Installation:**
-```bash
-# Verify installation
-your-feature --version
+### Types
 
-# Basic usage
-your-feature command
+| Type | Usage |
+|:---|:---|
+| `fix` | Bug fix |
+| `feat` | New feature |
+| `docs` | Documentation only |
+| `test` | Adding or updating tests |
+| `refactor` | Code restructuring (no behavior change) |
+| `security` | Security hardening or fix |
+| `perf` | Performance improvement |
+| `infra` | CI/CD, Makefile, pre-commit, packaging |
+| `chore` | Housekeeping, formatting |
+
+### Examples
+
+```
+fix(codecs): add pre-install detection for multimedia packages
+
+install_codecs() now checks 5 codec packages and displays installed
+vs available versions before prompting the user.
+
+Refs: #42
 ```
 
-**Configuration:**
-Edit `~/.config/your-feature/config.conf`:
-```ini
-setting = value
 ```
+feat(uninstall): implement full --uninstall mode
 
-**Troubleshooting:**
-- Issue 1: Solution 1
-- Issue 2: Solution 2
+Scans for all known gaming components (APT, Flatpak, GE-Proton,
+configs), displays categorized inventory, removes in reverse
+dependency order with confirmation gates.
+
+Refs: #38
 ```
 
 ---
 
-## 👥 Community
+## Pull Request Process
 
-### Communication Channels
+### Before Submitting
 
-- **GitHub Issues** - Bug reports, feature requests
-- **GitHub Discussions** - General questions, ideas
-- **Pull Requests** - Code contributions
+1. **Run all quality gates:** `make check` (must pass)
+2. **Run verification:** `make verify` (recommended)
+3. **Check for anti-patterns:** Review `tasks/lessons.md`
+4. **Update tracking files:** All 4 required files
+5. **Bump version** (if warranted): Update `SCRIPT_VERSION` + header banner
 
-### Getting Help
+### PR Template
 
-**Need help contributing?**
-- Read existing code for examples
-- Check closed PRs for similar changes
-- Ask in GitHub Discussions
-- Reference this guide
+The repository includes a [PR template](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/.github/PULL_REQUEST_TEMPLATE.md) with 13 sections. Key sections:
 
-### Recognition
+- **Testing Evidence** — `make check` output required
+- **Cascade Impact Analysis** — Check `sync_function.md` for downstream effects
+- **Security Considerations** — 8-point security checklist
+- **Documentation Updates** — 4-file tracking requirement enforced
+- **Pre-Submission Checklist** — 9 mandatory checks including 4 anti-pattern verifications
+
+### Review Timeline
+
+- Initial review: within 72 hours
+- Follow-up reviews: within 48 hours
+- Security-related PRs: prioritized for expedited review
+
+---
+
+## Issue Guidelines
+
+Use the structured issue templates:
+
+| Template | Use For |
+|:---|:---|
+| [🐛 Bug Report](https://github.com/Sandler73/Debian-Gaming-Setup-Project/issues/new?template=bug_report.yml) | Bugs, errors, unexpected behavior |
+| [✨ Feature Request](https://github.com/Sandler73/Debian-Gaming-Setup-Project/issues/new?template=feature_request.yml) | New features, enhancements |
+| [🔒 Security Vulnerability](https://github.com/Sandler73/Debian-Gaming-Setup-Project/security/advisories/new) | Security issues (use private reporting) |
+
+For questions and general discussion, use [GitHub Discussions](https://github.com/Sandler73/Debian-Gaming-Setup-Project/discussions).
+
+---
+
+## Governance & Tracking
+
+The project follows strict governance rules defined in `tasks/general_reminders.md`:
+
+### Workflow
+
+**Plan → Review → Execute → Validate → Record**
+
+### 4-File Tracking Rule
+
+Every change must update:
+
+1. `tasks/todo.md` — Active plan
+2. `tasks/todo_complete.md` — Delivery history
+3. `docs/CHANGELOG.md` — User-facing changelog
+4. `tasks/sync_function.md` — Code cross-reference (if code changed)
+
+### Verification Checklist
+
+Before any delivery:
+- `python3 -m py_compile debian_gaming_setup.py` passes
+- `bash -n` passes on extracted launch_game.sh
+- `grep -E 'TIMEOUT_API0|GPUType|RoyalHighgrass|DadSchoworseorse'` finds nothing
+- `make check` passes (lint + 90 tests + security)
+- No removed functionality (unless explicitly approved)
+
+---
+
+## Review Process
+
+### What Reviewers Check
+
+1. **Correctness** — Does it work? Are edge cases handled?
+2. **Security** — No new shell=True, eval, hardcoded secrets, or unsafe patterns
+3. **Testing** — Are new features tested? Do existing tests still pass?
+4. **Code quality** — PEP 8, proper type hints, descriptive names, good docstrings
+5. **Documentation** — Are tracking files updated? Is the changelog entry clear?
+6. **Cascade impact** — Are downstream methods unaffected?
+7. **No functionality removal** — Changes must not break existing features
+
+### Common Review Feedback
+
+- "Missing encoding parameter on open()"
+- "Add pre-install detection before the confirm prompt"
+- "Use run_command() instead of direct subprocess.run()"
+- "Update sync_function.md with the new method"
+- "Test assertion hardcodes version — use gaming_module.SCRIPT_VERSION"
+
+---
+
+## Release Process
+
+Releases are automated via the CI/CD pipeline:
+
+1. Maintainer updates `SCRIPT_VERSION` and header banner
+2. `make verify` passes
+3. Commit and tag: `git tag v3.5.0 && git push origin v3.5.0`
+4. CI validates tag matches `SCRIPT_VERSION`
+5. GitHub Release is created automatically with the script attached
+
+### Version Numbering (Semver)
+
+| Bump | When |
+|:---|:---|
+| **PATCH** (x.x.1) | Bug fixes, documentation updates |
+| **MINOR** (x.1.0) | New features, non-breaking enhancements |
+| **MAJOR** (1.0.0) | Breaking changes (e.g., dropped Python 3.11 support) |
+
+---
+
+## Community Guidelines
+
+All participants must follow the [Code of Conduct](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/CODE_OF_CONDUCT.md). In summary:
+
+- Be respectful, inclusive, and constructive
+- Focus on the work, not the person
+- Accept feedback gracefully
+- Ask questions — there are no dumb questions
+
+---
+
+## Recognition
 
 Contributors are recognized in:
-- GitHub contributors page
-- CHANGELOG.md (for significant contributions)
-- README.md acknowledgments section
+- Pull request merge messages
+- CHANGELOG.md entries
+- Release notes
+
+We value all contributions — code, docs, testing, bug reports, and community support.
 
 ---
 
-## 📋 Checklist for Contributors
-
-**Before submitting PR:**
-
-- [ ] Forked repository and created feature branch
-- [ ] Made changes following coding standards
-- [ ] Added comments and docstrings
-- [ ] Tested with `--dry-run`
-- [ ] Tested on at least one distribution
-- [ ] Updated relevant documentation
-- [ ] Updated CHANGELOG.md
-- [ ] Committed with descriptive messages
-- [ ] Pushed to your fork
-- [ ] Created pull request with filled template
-- [ ] Responded to review feedback
-
----
-
-## 🙏 Thank You!
-
-Every contribution helps make Linux gaming more accessible. Whether you're fixing a typo, adding a feature, or testing on a new distribution, your effort is appreciated!
-
-**Happy Contributing!** 🎮
-
----
-
-**Questions?** Open a GitHub Discussion or comment on an issue!
-- [Discussions](https://github.com/Sandler73/Debian-Gaming-Setup-Project/discussions)
-- [Issues](https://github.com/Sandler73/Debian-Gaming-Setup-Project/issues)
-
-**Version:** 2.1.0  
-**Last Updated:** January 2026
+**Thank you for contributing to Linux gaming!** 🎮🐧
