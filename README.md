@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/header-debian-gaming.png" alt="Debian Gaming Setup Project" width="100%" />
+  <img src="assets/header-debian-gaming.png" alt="Debian Gaming Setup Project" width="75%" />
 </p>
 
 # Debian-Based Gaming Setup Script v2.6
