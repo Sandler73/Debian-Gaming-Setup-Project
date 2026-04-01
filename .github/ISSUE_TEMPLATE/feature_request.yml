@@ -1,0 +1,180 @@
+name: ✨ Feature Request
+description: Suggest a new feature, enhancement, or improvement for the Debian Gaming Setup Script
+title: "[FEATURE] "
+labels: ["enhancement", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Debian Gaming Setup Script — Feature Request
+        
+        Thank you for suggesting an improvement! Please describe your idea in
+        detail so we can evaluate and prioritize it.
+        
+        **Before submitting**, please check:
+        - [ ] I searched [existing issues](https://github.com/Sandler73/Debian-Gaming-Setup-Project/issues) and [discussions](https://github.com/Sandler73/Debian-Gaming-Setup-Project/discussions) for similar requests
+        - [ ] I reviewed the [Enhancement Roadmap](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/docs/Enhancement_Roadmap.md) to see if this is already planned
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: |
+        What problem does this feature solve? Is your request related to a
+        frustration or limitation you've encountered?
+      placeholder: |
+        I'm frustrated when... / It would be helpful if... / Currently there's no way to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: |
+        Describe the feature you'd like. Be as specific as possible about
+        the behavior, interface (CLI flags, output format), and expected result.
+      placeholder: |
+        Add a --feature-name flag that:
+        1. Does X
+        2. Outputs Y
+        3. Stores Z
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: |
+        Have you considered alternative approaches? Describe any workarounds
+        you currently use or other tools that provide similar functionality.
+      placeholder: "I currently work around this by... / Tool X does something similar but..."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Feature Category
+      description: Which area does this feature relate to?
+      options:
+        - "Gaming platforms — New platform or launcher support"
+        - "GPU/Driver — Driver detection, installation, or configuration"
+        - "Performance — Tools, optimizations, or benchmarking"
+        - "Compatibility — Wine, Proton, or compatibility layer improvements"
+        - "UX/Interface — CLI improvements, output formatting, prompts"
+        - "Maintenance — Update, rollback, uninstall, or self-update"
+        - "Security — Security hardening or audit improvements"
+        - "Documentation — Guides, wiki, or inline help"
+        - "Testing/CI — Test coverage, CI/CD pipeline, or quality gates"
+        - "Distribution support — New distro or version support"
+        - "System integration — Desktop environment, services, or notifications"
+        - "Packaging — .deb package, Snap, Flatpak, or AppImage"
+        - "Other"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Suggested Priority
+      description: How important is this feature to you?
+      options:
+        - "Critical — I can't use the script effectively without this"
+        - "High — Significant improvement to daily workflow"
+        - "Medium — Nice to have, would improve experience"
+        - "Low — Minor convenience or polish"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Estimated Complexity
+      description: Your best guess at implementation complexity (we'll reassess).
+      options:
+        - "Small — Single method or config change"
+        - "Medium — New method with integration into existing flow"
+        - "Large — New subsystem or major architectural change"
+        - "Unknown — Not sure"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impact Areas
+      description: Which existing components might this feature affect?
+      options:
+        - label: CLI argument parser (new flags)
+        - label: InstallationConfig dataclass (new fields)
+        - label: System detection pipeline
+        - label: Installation workflow (run() method)
+        - label: Rollback engine
+        - label: Performance launcher (launch-game.sh)
+        - label: Documentation (README, wiki, guides)
+        - label: Test suite
+        - label: CI/CD pipeline
+        - label: "None / New standalone component"
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case / User Story
+      description: |
+        Describe a concrete scenario where this feature would be used.
+        Format: "As a [type of user], I want [feature] so that [benefit]."
+      placeholder: |
+        As a Linux gamer with multiple distros, I want to export my gaming
+        configuration so that I can quickly replicate my setup on a new install.
+    validations:
+      required: false
+
+  - type: textarea
+    id: mockup
+    attributes:
+      label: CLI / Output Mockup
+      description: |
+        If applicable, show what the CLI interface or output would look like.
+        Use code blocks for terminal output mockups.
+      render: shell
+      placeholder: |
+        $ sudo python3 debian_gaming_setup.py --new-feature
+        ══════════════════════════════════════════════════════════════
+                              NEW FEATURE
+        ══════════════════════════════════════════════════════════════
+        ✓ Feature completed successfully
+    validations:
+      required: false
+
+  - type: input
+    id: distribution
+    attributes:
+      label: Your Distribution
+      description: Which distribution would you primarily use this feature on?
+      placeholder: "Ubuntu 24.04 / Zorin OS 17 / Linux Mint 22"
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: |
+        Any other context: screenshots, links to similar features in other
+        tools, technical references, or related issues.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Willingness to Contribute
+      description: Would you be willing to help implement this feature?
+      options:
+        - label: "I would be willing to submit a pull request for this feature"
+        - label: "I can help test this feature on my system"
+        - label: "I can help write documentation for this feature"
