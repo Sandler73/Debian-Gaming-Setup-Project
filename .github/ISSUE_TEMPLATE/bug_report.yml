@@ -1,0 +1,239 @@
+name: 🐛 Bug Report
+description: Report a bug, error, or unexpected behavior in the Debian Gaming Setup Script
+title: "[BUG] "
+labels: ["bug", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Debian Gaming Setup Script — Bug Report
+        
+        Thank you for reporting a bug. Please fill in all sections below.
+        The more detail you provide, the faster we can diagnose and fix the issue.
+        
+        **Before submitting**, please check:
+        - [ ] I searched [existing issues](https://github.com/Sandler73/Debian-Gaming-Setup-Project/issues) for duplicates
+        - [ ] I tested with the latest version of the script
+        - [ ] I checked the [FAQ](https://github.com/Sandler73/Debian-Gaming-Setup-Project/wiki/Frequently-Asked-Questions) and [Troubleshooting Guide](https://github.com/Sandler73/Debian-Gaming-Setup-Project/wiki/Troubleshooting-Guide)
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of the bug.
+      placeholder: "When I run the script with --preset standard, it crashes during the codec installation step with..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Exact steps to reproduce the behavior.
+      placeholder: |
+        1. Run: sudo python3 debian_gaming_setup.py --preset standard -y
+        2. Wait for the "Multimedia Codecs" step
+        3. Observe error message
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+      placeholder: "The codec installation should complete without errors."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened. Include the full error message.
+      placeholder: "The script displayed 'An error occurred' and exited without details."
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-output
+    attributes:
+      label: Error Output
+      description: |
+        Paste the exact error output from the terminal.
+        Wrap in triple backticks for formatting.
+      render: shell
+      placeholder: |
+        >>> Installing restricted extras (codecs)
+        E: Package 'ubuntu-restricted-extras' has no installation candidate
+    validations:
+      required: false
+
+  - type: textarea
+    id: log-content
+    attributes:
+      label: Log File Content
+      description: |
+        Log files are at: ~/gaming_setup_logs/gaming_setup_YYYYMMDD_HHMMSS.log
+        
+        Find the latest: `ls -lt ~/gaming_setup_logs/gaming_setup_*.log | head -1`
+        
+        Paste the relevant section (last 50+ lines recommended).
+      render: text
+      placeholder: "Paste relevant log content here..."
+    validations:
+      required: false
+
+  - type: input
+    id: script-version
+    attributes:
+      label: Script Version
+      description: "Run: grep SCRIPT_VERSION debian_gaming_setup.py"
+      placeholder: "3.3.0"
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      description: "Run: python3 --version"
+      placeholder: "Python 3.12.3"
+    validations:
+      required: true
+
+  - type: input
+    id: distribution
+    attributes:
+      label: Linux Distribution & Version
+      description: "Run: lsb_release -ds 2>/dev/null || grep PRETTY_NAME /etc/os-release"
+      placeholder: "Ubuntu 24.04.1 LTS"
+    validations:
+      required: true
+
+  - type: input
+    id: kernel
+    attributes:
+      label: Kernel Version
+      description: "Run: uname -r"
+      placeholder: "6.8.0-45-generic"
+    validations:
+      required: true
+
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU Information
+      description: "Run: lspci | grep -i vga"
+      placeholder: "NVIDIA GeForce RTX 3070 / AMD Radeon RX 7900 / Intel Arc A770"
+    validations:
+      required: true
+
+  - type: input
+    id: desktop
+    attributes:
+      label: Desktop Environment
+      description: "Run: echo $XDG_CURRENT_DESKTOP"
+      placeholder: "GNOME / KDE / XFCE / Cinnamon"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: vm-status
+    attributes:
+      label: Virtual Machine
+      description: Is the script running in a VM?
+      options:
+        - "No — bare metal"
+        - "Yes — VMware"
+        - "Yes — VirtualBox"
+        - "Yes — KVM/QEMU"
+        - "Yes — Hyper-V"
+        - "Yes — Other"
+    validations:
+      required: true
+
+  - type: input
+    id: command-used
+    attributes:
+      label: Exact Command Used
+      description: The full command you ran.
+      placeholder: "sudo python3 debian_gaming_setup.py --preset standard -y"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Installation Mode
+      description: Which mode were you using?
+      options:
+        - Interactive (no flags)
+        - Targeted (specific --flags)
+        - Preset (--preset NAME)
+        - Dry-run (--dry-run)
+        - Update (--update)
+        - Rollback (--rollback)
+        - Uninstall (--uninstall)
+        - Self-update (--self-update)
+        - Check requirements (--check-requirements)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: component
+    attributes:
+      label: Component Affected
+      description: Check all that apply.
+      options:
+        - label: System detection (distro, GPU, VM)
+        - label: GPU drivers (NVIDIA, AMD, Intel)
+        - label: Gaming platforms (Steam, Lutris, Heroic, etc.)
+        - label: Wine / Proton / GE-Proton
+        - label: Performance tools (MangoHud, GameMode, vkBasalt)
+        - label: Performance launcher (launch-game.sh)
+        - label: System update / upgrade
+        - label: Rollback engine
+        - label: Uninstall mode
+        - label: Essential packages / codecs
+        - label: Waydroid / SOBER
+        - label: Self-update
+        - label: "Other (specify in description)"
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severely does this affect your use?
+      options:
+        - "Critical — Script crashes, data loss, or system damage"
+        - "High — Major feature completely broken, no workaround"
+        - "Medium — Feature partially broken, workaround exists"
+        - "Low — Minor cosmetic issue or inconvenience"
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround
+      description: If you found a workaround, describe it here.
+      placeholder: "None found."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: |
+        Any other context: previous versions where it worked, related issues,
+        screenshots, terminal recordings, etc.
+    validations:
+      required: false
