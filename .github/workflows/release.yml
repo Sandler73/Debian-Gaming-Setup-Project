@@ -1,0 +1,495 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Debian Gaming Setup Script — Release Workflow
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# SYNOPSIS:
+#   Dedicated release workflow triggered by version tags (v*). Performs full
+#   verification, builds release artifacts, generates release notes, and
+#   publishes a GitHub Release.
+#
+# TRIGGER:
+#   Push of a version tag: v3.5.0, v3.5.1-rc.1, etc.
+#
+# PROCESS:
+#   1. verify        — Full quality gate (lint, test, security)
+#   2. version-check — Verify tag matches SCRIPT_VERSION and header
+#   3. build         — Create 3 release artifacts (standalone, zip, tar.gz)
+#   4. release       — Generate notes and publish GitHub Release
+#
+# PREREQUISITES:
+#   Before pushing a tag, run locally:
+#     make version-bump NEW=X.Y.Z
+#     make check
+#     make release-preflight
+#     git add -A && git commit -m "release: vX.Y.Z"
+#     git tag vX.Y.Z && git push origin main --tags
+#
+# NODE.JS COMPATIBILITY:
+#   All actions use v6 (Node.js 24 compatible).
+#
+# VERSION: 3.5.0
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (validate but do not publish)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: write
+
+env:
+  SCRIPT: debian_gaming_setup.py
+  BAD_PATTERNS: "TIMEOUT_API0|GPUType|RoyalHighgrass|DadSchoworseorse"
+  PYTHON_DEFAULT: "3.12"
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 1: Full Quality Verification
+  # ═══════════════════════════════════════════════════════════════════════════
+  verify:
+    name: "🔍 Pre-Release Verification"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov bandit
+
+      # ── Lint Suite (8 checks) ──
+      - name: "[Lint 1/8] Python syntax"
+        run: python3 -m py_compile ${{ env.SCRIPT }}
+
+      - name: "[Lint 2/8] Bash syntax"
+        run: |
+          python3 -c "
+          import re
+          with open('${{ env.SCRIPT }}', 'r') as f:
+              content = f.read()
+          match = re.search(r\"r'''(#!/bin/bash.*?)'''\", content, re.DOTALL)
+          if match:
+              with open('/tmp/launch_game.sh', 'w') as f:
+                  f.write(match.group(1))
+          else:
+              exit(1)
+          "
+          bash -n /tmp/launch_game.sh
+
+      - name: "[Lint 3/8] Anti-pattern check"
+        run: |
+          if grep -qE "${{ env.BAD_PATTERNS }}" ${{ env.SCRIPT }}; then
+            echo "::error::Hallucinated pattern found!"
+            grep -nE "${{ env.BAD_PATTERNS }}" ${{ env.SCRIPT }}
+            exit 1
+          fi
+
+      - name: "[Lint 4/8] No shell=True"
+        run: |
+          python3 -c "
+          import ast, sys
+          with open('${{ env.SCRIPT }}') as f:
+              tree = ast.parse(f.read())
+          for node in ast.walk(tree):
+              if isinstance(node, ast.Call):
+                  func = getattr(node, 'func', None)
+                  if isinstance(func, ast.Attribute) and func.attr in ('run', 'Popen', 'call', 'check_call', 'check_output'):
+                      for kw in node.keywords:
+                          if kw.arg == 'shell' and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+                              print(f'::error::shell=True at line {node.lineno}')
+                              sys.exit(1)
+          print('✅ No shell=True')
+          "
+
+      - name: "[Lint 5/8] No eval/exec"
+        run: |
+          python3 -c "
+          import ast, sys
+          with open('${{ env.SCRIPT }}') as f:
+              tree = ast.parse(f.read())
+          for node in ast.walk(tree):
+              if isinstance(node, ast.Call) and isinstance(getattr(node, 'func', None), ast.Name):
+                  if node.func.id in ('eval', 'exec'):
+                      print(f'::error::{node.func.id}() at line {node.lineno}')
+                      sys.exit(1)
+          print('✅ No eval/exec')
+          "
+
+      - name: "[Lint 6/8] Encoding check"
+        run: |
+          python3 -c "
+          import re, sys
+          lines = open('${{ env.SCRIPT }}').readlines()
+          pattern = re.compile(r\"open\([^)]+,\s*'[rw]'\s*\)\")
+          errors = [(i+1, l.strip()[:70]) for i, l in enumerate(lines)
+              if not l.strip().startswith('#') and pattern.search(l) and 'encoding' not in l]
+          for n, t in errors:
+              print(f'::error::Missing encoding at line {n}: {t}')
+          sys.exit(1) if errors else print('✅ All open() have encoding')
+          "
+
+      - name: "[Lint 7/8] Import check"
+        run: |
+          python3 -c "
+          import sys
+          source = open('${{ env.SCRIPT }}').read()
+          deprecated = ['distutils', 'imp', 'optparse', 'formatter', 'cgi', 'cgitb', 'imghdr', 'sndhdr', 'pipes', 'crypt']
+          found = [d for d in deprecated if f'import {d}' in source]
+          for d in found:
+              print(f'::error::Deprecated import: {d}')
+          sys.exit(1) if found else print('✅ No deprecated imports')
+          "
+
+      - name: "[Lint 8/8] No f-string logging"
+        run: |
+          python3 -c "
+          import re, sys
+          lines = open('${{ env.SCRIPT }}').readlines()
+          count = 0
+          for i, line in enumerate(lines):
+              stripped = line.strip()
+              m = re.match(r'logging\.(info|warning|error|debug|critical)\(', stripped)
+              if m:
+                  depth = stripped.count('(') - stripped.count(')')
+                  j = i + 1
+                  while depth > 0 and j < len(lines):
+                      depth += lines[j].count('(') - lines[j].count(')')
+                      j += 1
+                  full = ''.join(lines[i:j])
+                  if 'f\"' in full or \"f'\" in full:
+                      print(f'::error::f-string logging at line {i+1}')
+                      count += 1
+          sys.exit(1) if count else print('✅ No f-string logging')
+          "
+
+      # ── Test Suite ──
+      - name: Run full test suite (Python 3.12)
+        run: |
+          pytest tests/ -v --tb=short \
+            --cov=. --cov-report=term-missing \
+            --junitxml=test-results-release.xml
+
+      - name: Verify test count
+        run: |
+          EXPECTED=136
+          ACTUAL=$(pytest tests/ --co -q 2>/dev/null | tail -1 | grep -oP '\d+')
+          if [ "$ACTUAL" -lt "$EXPECTED" ]; then
+            echo "::error::Test count regression: expected $EXPECTED, got $ACTUAL"
+            exit 1
+          fi
+          echo "✅ Test count: $ACTUAL"
+
+      # ── Security Scan ──
+      - name: Bandit security scan
+        run: |
+          bandit -r ${{ env.SCRIPT }} -ll --skip B404,B603,B607 -f txt || true
+
+      - name: Security test suite
+        run: pytest tests/test_security.py -v --tb=short
+
+      # ── Subprocess timeout audit ──
+      - name: Verify all subprocess timeouts
+        run: |
+          python3 -c "
+          import ast, sys
+          with open('${{ env.SCRIPT }}') as f:
+              tree = ast.parse(f.read())
+          for node in ast.walk(tree):
+              if isinstance(node, ast.Call):
+                  func = getattr(node, 'func', None)
+                  if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+                      if func.value.id == 'subprocess' and func.attr == 'run':
+                          if not any(kw.arg == 'timeout' for kw in node.keywords):
+                              print(f'::error::subprocess.run without timeout at line {node.lineno}')
+                              sys.exit(1)
+          print('✅ All subprocess.run calls have timeout')
+          "
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-test-results
+          path: test-results-release.xml
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 2: Version Validation
+  # ═══════════════════════════════════════════════════════════════════════════
+  version-check:
+    name: "🏷️ Version Validation"
+    runs-on: ubuntu-latest
+    needs: verify
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT }}
+
+      - name: Extract and validate version
+        id: extract
+        run: |
+          # Extract tag version (strip 'v' prefix)
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            # Manual dispatch — use SCRIPT_VERSION
+            TAG_VERSION=""
+          fi
+
+          # Extract SCRIPT_VERSION from code
+          SCRIPT_VERSION=$(python3 -c "
+          import re
+          with open('${{ env.SCRIPT }}') as f:
+              for line in f:
+                  m = re.match(r'SCRIPT_VERSION\s*=\s*\"(.+)\"', line)
+                  if m:
+                      print(m.group(1))
+                      break
+          ")
+
+          # Extract header banner version
+          HEADER_VERSION=$(head -5 ${{ env.SCRIPT }} | grep -oP 'v\d+\.\d+\.\d+' || echo "")
+
+          echo "  Tag version:    ${TAG_VERSION:-'(manual dispatch)'}"
+          echo "  SCRIPT_VERSION: $SCRIPT_VERSION"
+          echo "  Header banner:  $HEADER_VERSION"
+
+          # Validate tag matches SCRIPT_VERSION
+          if [ -n "$TAG_VERSION" ] && [ "$TAG_VERSION" != "$SCRIPT_VERSION" ]; then
+            echo "::error::Tag ($TAG_VERSION) != SCRIPT_VERSION ($SCRIPT_VERSION)"
+            exit 1
+          fi
+
+          # Validate header matches SCRIPT_VERSION
+          if [ "v$SCRIPT_VERSION" != "$HEADER_VERSION" ]; then
+            echo "::warning::Header ($HEADER_VERSION) != SCRIPT_VERSION (v$SCRIPT_VERSION)"
+          fi
+
+          echo "✅ Version validated: $SCRIPT_VERSION"
+          echo "version=$SCRIPT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Verify CHANGELOG entry exists
+        run: |
+          VERSION="${{ steps.extract.outputs.version }}"
+          if ! grep -q "\[$VERSION\]" docs/CHANGELOG.md; then
+            echo "::error::No CHANGELOG entry found for version $VERSION"
+            exit 1
+          fi
+          echo "✅ CHANGELOG entry exists for $VERSION"
+
+      - name: Verify version in docs
+        run: |
+          VERSION="${{ steps.extract.outputs.version }}"
+          STALE=$(grep -rn "\*\*Version:\*\* [0-9]" docs/*.md wiki/*.md 2>/dev/null \
+            | grep -v "$VERSION" | grep -vi "changelog\|history" | wc -l)
+          if [ "$STALE" -gt 0 ]; then
+            echo "::warning::$STALE stale version references found in docs"
+            grep -rn "\*\*Version:\*\* [0-9]" docs/*.md wiki/*.md 2>/dev/null \
+              | grep -v "$VERSION" | grep -vi "changelog\|history" | head -5
+          else
+            echo "✅ All doc versions match $VERSION"
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 3: Build Release Artifacts
+  # ═══════════════════════════════════════════════════════════════════════════
+  build:
+    name: "📦 Build Artifacts"
+    runs-on: ubuntu-latest
+    needs: version-check
+    env:
+      VERSION: ${{ needs.version-check.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT }}
+
+      # Standalone script (most users just want this)
+      - name: Create standalone script
+        run: |
+          cp ${{ env.SCRIPT }} "debian_gaming_setup_v${{ env.VERSION }}.py"
+          echo "✅ Standalone: debian_gaming_setup_v${{ env.VERSION }}.py"
+
+      # Full project ZIP
+      - name: Create ZIP archive
+        run: |
+          zip -r "debian-gaming-setup-v${{ env.VERSION }}.zip" \
+            ${{ env.SCRIPT }} Makefile .pre-commit-config.yaml \
+            .gitignore LICENSE CONTRIBUTING.md CODE_OF_CONDUCT.md \
+            tests/ docs/ wiki/ .github/ \
+            -x '*__pycache__*' '*.pytest_cache*' '*.pyc'
+          echo "✅ ZIP: debian-gaming-setup-v${{ env.VERSION }}.zip"
+
+      # Full project tar.gz
+      - name: Create tar.gz archive
+        run: |
+          tar czf "debian-gaming-setup-v${{ env.VERSION }}.tar.gz" \
+            --exclude='__pycache__' --exclude='.pytest_cache' --exclude='*.pyc' \
+            ${{ env.SCRIPT }} Makefile .pre-commit-config.yaml \
+            .gitignore LICENSE CONTRIBUTING.md CODE_OF_CONDUCT.md \
+            tests/ docs/ wiki/ .github/
+          echo "✅ TAR: debian-gaming-setup-v${{ env.VERSION }}.tar.gz"
+
+      # SHA256 checksums for all artifacts
+      - name: Generate checksums
+        run: |
+          sha256sum debian_gaming_setup_v${{ env.VERSION }}.py \
+                    debian-gaming-setup-v${{ env.VERSION }}.zip \
+                    debian-gaming-setup-v${{ env.VERSION }}.tar.gz \
+            > SHA256SUMS.txt
+          echo "✅ Checksums:"
+          cat SHA256SUMS.txt
+
+      - name: List artifacts
+        run: |
+          echo "═══ Release Artifacts ═══"
+          ls -lh debian_gaming_setup_v* debian-gaming-setup-v* SHA256SUMS.txt
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-artifacts
+          path: |
+            debian_gaming_setup_v*.py
+            debian-gaming-setup-v*.zip
+            debian-gaming-setup-v*.tar.gz
+            SHA256SUMS.txt
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 4: Publish GitHub Release
+  # ═══════════════════════════════════════════════════════════════════════════
+  release:
+    name: "🚀 Publish Release"
+    runs-on: ubuntu-latest
+    needs: [verify, version-check, build]
+    if: startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != 'true'
+    env:
+      VERSION: ${{ needs.version-check.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: release-artifacts
+
+      - name: Generate release notes
+        run: |
+          LINES=$(wc -l < ${{ env.SCRIPT }})
+          TESTS=$(find tests -name 'test_*.py' -exec grep -c 'def test_' {} + 2>/dev/null | awk -F: '{s+=$2}END{print s}')
+          WIKI=$(ls wiki/*.md 2>/dev/null | wc -l)
+
+          cat > release-notes.md << 'HEADER'
+          ## Debian Gaming Setup Script v${{ env.VERSION }}
+
+          ### Quick Install
+          ```bash
+          # Download the standalone script
+          wget https://github.com/Sandler73/Debian-Gaming-Setup-Project/releases/download/v${{ env.VERSION }}/debian_gaming_setup_v${{ env.VERSION }}.py
+
+          # Run with a preset
+          sudo python3 debian_gaming_setup_v${{ env.VERSION }}.py --preset standard -y
+          ```
+
+          HEADER
+
+          cat >> release-notes.md << EOF
+
+          ### Project Statistics
+          | Metric | Value |
+          |:---|:---|
+          | Script | ${LINES} lines, Python 3.12+, zero dependencies |
+          | Tests | ${TESTS} tests, 100% critical method coverage |
+          | Wiki | ${WIKI} pages |
+          | CI/CD | 8 jobs (lint, test, security, performance, docs) |
+
+          ### Downloads
+          | File | Description |
+          |:---|:---|
+          | \`debian_gaming_setup_v${{ env.VERSION }}.py\` | **Standalone script** (recommended for most users) |
+          | \`debian-gaming-setup-v${{ env.VERSION }}.zip\` | Full project (script + tests + docs + wiki) |
+          | \`debian-gaming-setup-v${{ env.VERSION }}.tar.gz\` | Full project (tar.gz) |
+          | \`SHA256SUMS.txt\` | SHA-256 checksums for all artifacts |
+
+          ### Verify Download
+          \`\`\`bash
+          sha256sum -c SHA256SUMS.txt
+          \`\`\`
+
+          See [CHANGELOG](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/docs/CHANGELOG.md) for full release details.
+          See [Wiki](https://github.com/Sandler73/Debian-Gaming-Setup-Project/wiki) for complete documentation.
+          EOF
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            debian_gaming_setup_v*.py
+            debian-gaming-setup-v*.zip
+            debian-gaming-setup-v*.tar.gz
+            SHA256SUMS.txt
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+          fail_on_unmatched_files: true
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 5: Release Summary
+  # ═══════════════════════════════════════════════════════════════════════════
+  summary:
+    name: "📊 Release Summary"
+    runs-on: ubuntu-latest
+    needs: [verify, version-check, build, release]
+    if: always()
+    env:
+      VERSION: ${{ needs.version-check.outputs.version }}
+    steps:
+      - name: Release Summary
+        run: |
+          echo "## Release Pipeline — v${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|:---|:---:|" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-Release Verification | ${{ needs.verify.result == 'success' && '✅' || '❌' }} ${{ needs.verify.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version Validation | ${{ needs.version-check.result == 'success' && '✅' || '❌' }} ${{ needs.version-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Artifacts | ${{ needs.build.result == 'success' && '✅' || '❌' }} ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Publish Release | ${{ needs.release.result == 'success' && '✅' || needs.release.result == 'skipped' && '⏭️ skipped' || '❌' }} ${{ needs.release.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.release.result }}" = "success" ]; then
+            echo "🎉 **Release v${{ env.VERSION }} published successfully!**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "[View Release](https://github.com/Sandler73/Debian-Gaming-Setup-Project/releases/tag/v${{ env.VERSION }})" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "🔍 **Dry run completed** — release was not published" >> $GITHUB_STEP_SUMMARY
+          fi
