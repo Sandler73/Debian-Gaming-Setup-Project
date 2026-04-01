@@ -1,4 +1,4 @@
-# Usage Guide v2.5
+# Usage Guide v3.5
 
 **Complete reference for all features and command-line options**
 
@@ -104,8 +104,11 @@ sudo python3 debian_gaming_setup.py --dry-run [OPTIONS]
 # Update all previously installed components
 sudo python3 debian_gaming_setup.py --update
 
-# Rollback a previous installation
+# Rollback the most recent installation session
 sudo python3 debian_gaming_setup.py --rollback
+
+# Full uninstall — remove all gaming components
+sudo python3 debian_gaming_setup.py --uninstall
 
 # Check for newer script version
 sudo python3 debian_gaming_setup.py --self-update
@@ -113,6 +116,8 @@ sudo python3 debian_gaming_setup.py --self-update
 # Validate system requirements only
 sudo python3 debian_gaming_setup.py --check-requirements
 ```
+
+The `--uninstall` mode scans for all known gaming components (APT packages, Flatpak apps, GE-Proton versions, config files), displays a categorized inventory with versions, then removes in reverse dependency order after confirmation.
 
 ---
 
@@ -208,6 +213,7 @@ sudo python3 debian_gaming_setup.py --check-requirements
 
 ```
 --rollback              Rollback previous installation (full action-based reversal)
+--uninstall             Full uninstall: remove all gaming components installed by script
 --update                Update all previously installed components
 --self-update           Check GitHub for newer script version and install
 --check-requirements    Validate system requirements without installing
@@ -542,7 +548,7 @@ Also runs automatically at the start of every installation.
 | RAM | 2 GB | — |
 | Architecture | x86_64/amd64 | i386/i686 (limited support) |
 | dpkg lock | Not locked | — |
-| Python version | 3.7+ | — |
+| Python version | 3.12+ | — |
 
 If any requirement fails, you're prompted to continue or cancel.
 
@@ -734,7 +740,7 @@ flatpak uninstall app.id
 ```
 
 **Q: What are the system requirements?**
-A: 5 GB disk, 2 GB RAM, x86_64 architecture, Python 3.7+. Run `--check-requirements` to validate.
+A: 5 GB disk, 2 GB RAM, x86_64 architecture, Python 3.12+. Run `--check-requirements` to validate.
 
 **Q: Does it require internet?**
 A: Yes, for package downloads. The script checks connectivity before remote operations.
@@ -746,4 +752,4 @@ A: No. The script uses only the Python standard library.
 
 **For more help:** See [README.md](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/README.md) and [Quick_Start.md](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/Quick_Start.md)
 
-**Version:** 2.5.0 | Updated: February 2026
+**Version:** 3.5.0 | Updated: March 2026
