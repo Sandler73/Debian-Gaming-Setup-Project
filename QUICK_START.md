@@ -1,4 +1,4 @@
-# Quick Start Guide v2.5
+# Quick Start Guide v3.5
 
 **Get gaming on Linux in under 30 minutes**
 
@@ -10,7 +10,7 @@ This guide walks you through your first installation, from download to playing g
 
 ### Prerequisites Checklist
 
-- [ ] Debian-based Linux (Ubuntu 20.04+, Linux Mint 20+, Debian 11+, Pop!_OS, ElementaryOS, Zorin OS, Kali Linux)
+- [ ] Debian-based Linux (Ubuntu 20.04+, Mint 20+, Debian 11+, Pop!_OS, Elementary, Zorin, Kali)
 - [ ] Sudo/root access
 - [ ] Internet connection (stable)
 - [ ] 10GB+ free disk space (5GB minimum)
@@ -751,7 +751,8 @@ sudo python3 debian_gaming_setup.py --preset standard -y  # Preset ✨
 
 # Maintenance ✨
 sudo python3 debian_gaming_setup.py --update         # Update components
-sudo python3 debian_gaming_setup.py --rollback        # Undo installation
+sudo python3 debian_gaming_setup.py --rollback        # Undo last session
+sudo python3 debian_gaming_setup.py --uninstall       # Remove all gaming components
 sudo python3 debian_gaming_setup.py --self-update     # Update script
 sudo python3 debian_gaming_setup.py --check-requirements  # Validate system
 
@@ -787,4 +788,4 @@ steam                                        # Run Steam from terminal
 
 **Questions?** See [Usage_Guide.md](https://github.com/Sandler73/Debian-Gaming-Setup-Project/blob/main/Usage_Guide.md) for detailed help.
 
-**Version:** 2.5.0 | Updated: February 2026
+**Version:** 3.5.0 | Updated: March 2026
